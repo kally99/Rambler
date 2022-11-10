@@ -31,31 +31,33 @@ set.seed(1)
 # ------------------------------------------------------------------
 
 # make up some data
-L <- 1e2
-w <- c(0.3, 0.7)
-c <- 100
-e0 <- 0.01
-e1 <- 0.02
+n_ind <- 5
+n_haplo <- 10
+samp_time <- seq(0, 20, 2)
+n_samp <- length(samp_time)
+haplo_freqs <- rep(2 / n_haplo, n_haplo)
+lambda <- rep(0.1, n_ind)
+decay_rate <- 0.1
+sens <- 0.9
 
-p <- rbeta(L, 1, 1)
-q <- w[1]*rbinom(L, 1, p) + w[2]*rbinom(L, 1, p)
-pi_ <- q*(1 - e0) + (1 - q)*e1
-coverage <- rpois(L, 1e3)
-a <- rbinom(L, coverage, rbeta(L, pi_*c, (1 - pi_)*c))
-r <- coverage - a
+# simulate cohort
+dat_list <- sim_cohort(4, samp_time, haplo_freqs, lambda, decay_rate, sens)
+df_data <- dat_list$df_data
 
-# plot what the WSAF looks like
-plot(a / (a + r), ylim = c(0, 1))
-
-# set vector of thermodynamic powers
-#beta <- seq(0, 1, 0.05)^3
-beta <- 1
 
 # run MCMC
-my_mcmc <- run_mcmc(a = a, r = r, p = p,
+my_mcmc <- run_mcmc(df_data = df_data,
+                    haplo_freqs = haplo_freqs,
+                    lambda = lambda,
                     burnin = 1e2,
                     samples = 1e3,
                     beta = beta)
+
+
+
+
+
+
 
 plot(my_mcmc$diagnostics$MC_accept_burnin, ylim = c(0, 1))
 plot(my_mcmc$diagnostics$MC_accept_sampling, ylim = c(0, 1))

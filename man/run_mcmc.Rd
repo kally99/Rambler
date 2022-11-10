@@ -5,10 +5,10 @@
 \title{Test function to run an example MCMC}
 \usage{
 run_mcmc(
-  a,
-  r,
-  p,
-  c = 100,
+  df_data,
+  haplo_freqs,
+  lambda,
+  sens = 0.9,
   burnin = 100,
   samples = 1000,
   beta = 1,
@@ -17,14 +17,16 @@ run_mcmc(
 )
 }
 \arguments{
-\item{a}{vector of alternative allele counts.}
+\item{df_data}{data.frame of haplotypes in each individual at each time
+point, in long format.}
 
-\item{r}{vector of reference allele counts.}
+\item{haplo_freqs}{vector giving the probability that each haplotype is
+transmitted in a given infectious bite (not quite the same thing as
+haplotype frequencies in the population).}
 
-\item{p}{vector of allele frequencies per locus.}
+\item{lambda}{vector of FOI in each individual.}
 
-\item{c}{overdispersion parameter for Beta-binomial distribution. Larger
-values of \code{c} give less overdispersion.}
+\item{sens}{sensitivity of sequencing (assumed the same for all haplotypes).}
 
 \item{burnin}{the number of burn-in iterations.}
 
@@ -41,6 +43,6 @@ output being printed to markdown files.}
 }
 \description{
 This should be replaced by a more carefully thought out
-  structure, probably involving defining a parameters dataframe outside of
+  structure, probably involving defining a parameters data.frame outside of
   this function that can be loaded in.
 }

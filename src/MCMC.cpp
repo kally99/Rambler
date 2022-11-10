@@ -11,7 +11,6 @@ MCMC::MCMC(Rcpp::List args_data, Rcpp::List args_params, Rcpp::List args_MCMC,
   
   // initialise system object
   s.load(args_data, args_params);
-  s.init_betabinom_lookup();
   
   // extract MCMC parameters
   burnin = args_MCMC["burnin"];
@@ -48,15 +47,19 @@ void MCMC::run_mcmc_burnin(Rcpp::Function update_progress) {
   }
   
   // initialise objects for storing results
+  /*
   mu_burnin = vector<vector<double>>(burnin, vector<double>(2));
   sigma_burnin = vector<double>(burnin);
   w_burnin = vector<double>(burnin);
+  */
   
   // load initial values into store objects
   int r_cold = rungs - 1;
+  /*
   mu_burnin[0] = particle_vec[r_cold].mu;
   sigma_burnin[0] = particle_vec[r_cold].sigma;
   w_burnin[0] = particle_vec[r_cold].w;
+  */
   
   // ---------- burn-in MCMC ----------
   
@@ -82,9 +85,11 @@ void MCMC::run_mcmc_burnin(Rcpp::Function update_progress) {
     
     // store results
     int r_cold = rung_order[rungs - 1];
+    /*
     mu_burnin[rep] = particle_vec[r_cold].mu;
     sigma_burnin[rep] = particle_vec[r_cold].sigma;
     w_burnin[rep] = particle_vec[r_cold].w;
+    */
     
     // update progress bars
     if (!silent) {
@@ -100,10 +105,11 @@ void MCMC::run_mcmc_burnin(Rcpp::Function update_progress) {
 void MCMC::run_mcmc_sampling(Rcpp::Function update_progress) {
   
   // initialise objects for storing results
+  /*
   mu_sampling = vector<vector<double>>(samples, vector<double>(2));
   sigma_sampling = vector<double>(samples);
   w_sampling = vector<double>(samples);
-  
+  */
   
   // ---------- sampling MCMC ----------
   
@@ -126,9 +132,11 @@ void MCMC::run_mcmc_sampling(Rcpp::Function update_progress) {
     
     // store results
     int r_cold = rung_order[rungs - 1];
+    /*
     mu_sampling[rep] = particle_vec[r_cold].mu;
     sigma_sampling[rep] = particle_vec[r_cold].sigma;
     w_sampling[rep] = particle_vec[r_cold].w;
+    */
     
     // update progress bars
     if (!silent) {

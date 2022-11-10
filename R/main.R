@@ -12,17 +12,33 @@ check_rambler_loaded <- function() {
 }
 
 #------------------------------------------------
+# check data format, and restruture into format expected by C++
+#' @noRd
+restructure_data <- function(df_data) {
+  
+  # basic checks
+  assert_dataframe(df_data)
+  
+  # TODO - further checks on format of data
+  
+  # return list
+  return(list())
+}
+
+#------------------------------------------------
 #' @title Test function to run an example MCMC
 #'
 #' @description This should be replaced by a more carefully thought out
-#'   structure, probably involving defining a parameters dataframe outside of
+#'   structure, probably involving defining a parameters data.frame outside of
 #'   this function that can be loaded in.
 #'
-#' @param a vector of alternative allele counts.
-#' @param r vector of reference allele counts.
-#' @param p vector of allele frequencies per locus.
-#' @param c overdispersion parameter for Beta-binomial distribution. Larger
-#'   values of \code{c} give less overdispersion.
+#' @param df_data data.frame of haplotypes in each individual at each time
+#'   point, in long format.
+#' @param haplo_freqs vector giving the probability that each haplotype is
+#'   transmitted in a given infectious bite (not quite the same thing as
+#'   haplotype frequencies in the population).
+#' @param lambda vector of FOI in each individual.
+#' @param sens sensitivity of sequencing (assumed the same for all haplotypes).
 #' @param burnin the number of burn-in iterations.
 #' @param samples the number of sampling iterations.
 #' @param beta vector of thermodynamic powers. Final value in the vector should
@@ -36,34 +52,33 @@ check_rambler_loaded <- function() {
 #' @importFrom utils txtProgressBar
 #' @export
 
-run_mcmc <- function(a, r, p,
-                     c = 100,
+run_mcmc <- function(df_data,
+                     haplo_freqs,
+                     lambda,
+                     sens = 0.9,
                      burnin = 1e2,
                      samples = 1e3,
                      beta = 1,
                      pb_markdown = FALSE,
                      silent = FALSE) {
   
+  # check data format, and restruture into format expected by C++
+  data_processed <- restructure_data(df_data)
+  
   # check inputs
-  assert_vector_pos_int(a)
-  assert_vector_pos_int(r)
-  assert_vector_bounded(p)
-  assert_same_length_multiple(a, r, p)
-  assert_single_pos(c, zero_allowed = FALSE);
+  assert_vector_bounded(haplo_freqs)
+  assert_vector_pos(lambda)
+  
   assert_single_pos_int(burnin, zero_allowed = FALSE)
   assert_single_pos_int(samples, zero_allowed = FALSE)
   assert_vector_bounded(beta)
-  #assert_eq(beta[length(beta)], 1)
+  #assert_eq(beta[length(beta)], 1)   # TODO - uncomment to force final rung to be true likelihood
   assert_single_logical(pb_markdown)
   assert_single_logical(silent)
   
-  # make a list of data inputs
-  args_data <- list(a = a,
-                    r = r)
-  
   # make a list of model parameters
-  args_params <- list(p = p,
-                      c = c)
+  args_params <- list(haplo_freqs = haplo_freqs,
+                      lambda = lambda)
   
   # make a list of MCMC parameters
   args_MCMC <- list(burnin = burnin,
@@ -84,10 +99,10 @@ run_mcmc <- function(a, r, p,
   # ---------- run MCMC ----------
   
   # run efficient C++ function
-  output_raw <- run_mcmc_cpp(args_data, args_params, args_MCMC, args_progress,
-                             args_functions)
+  output_raw <- run_mcmc_cpp(data_processed, args_params, args_MCMC,
+                             args_progress, args_functions)
   
-  #return(output_raw)
+  return(output_raw)
   
   # ---------- process output ----------
   

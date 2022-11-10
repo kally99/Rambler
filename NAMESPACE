@@ -2,6 +2,8 @@
 
 export(check_rambler_loaded)
 export(run_mcmc)
+export(sim_cohort)
+export(sim_ind)
 importFrom(Rcpp,sourceCpp)
 importFrom(magrittr,"%>%")
 importFrom(stats,setNames)

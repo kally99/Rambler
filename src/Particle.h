@@ -42,6 +42,5 @@ public:
   void update(double beta);
   void update_mu(double beta);
   void update_sigma(double beta);
-  void update_w(double beta);
   
 };
