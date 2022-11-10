@@ -2,6 +2,6 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 run_mcmc_cpp <- function(args_data, args_params, args_MCMC, args_progress, args_functions) {
-    .Call(`_Tapestry_run_mcmc_cpp`, args_data, args_params, args_MCMC, args_progress, args_functions)
+    .Call(`_Rambler_run_mcmc_cpp`, args_data, args_params, args_MCMC, args_progress, args_functions)
 }
 

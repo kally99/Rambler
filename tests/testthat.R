@@ -1,4 +1,4 @@
 library(testthat)
-library(Tapestry)
+library(Rambler)
 
-test_check("Tapestry")
+test_check("Rambler")

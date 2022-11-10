@@ -1,15 +1,8 @@
  <!-- badges: start -->
-  [![checks_develop](https://github.com/mrc-ide/Tapestry/workflows/checks_develop/badge.svg)](https://github.com/mrc-ide/Tapestry/actions)
-  [![checks_master](https://github.com/mrc-ide/Tapestry/workflows/checks_master/badge.svg)](https://github.com/mrc-ide/Tapestry/actions)
+  [![checks_develop](https://github.com/mrc-ide/Rambler/workflows/checks_develop/badge.svg)](https://github.com/mrc-ide/Rambler/actions)
+  [![checks_master](https://github.com/mrc-ide/Rambler/workflows/checks_master/badge.svg)](https://github.com/mrc-ide/Rambler/actions)
   <!-- badges: end -->
 
-# Tapestry
+# Rambler
 
-Malaria infections often contain multiple genotypes, and when sequenced together
-these produce a complex signal that is a mixture of the individual genotypes.
-Building on the framework of earlier programs like DEploid and DEploidIBD,
-Tapestry attempts to pull these individual genotypes apart by exploiting allele
-frequency imbalances within a sample, while simultaneously estimating segments
-of identity by descent (IBD) between sequences. Unlike previous programs,
-Tapestry uses advanced MCMC methods to ensure that results are robust even for
-high complexity of infection (COI).
+Malaria infections often contain multiple haplotypes. When sequenced at several points in time, these haplotypes may be present for a period beforing cleaing as parasite density decreases. We may also fail to detect a haplotype at a given point in time due to imperfect sensitivity of our sequencing. Rambler takes these factors into account and produces estimates of the time(s) at which each individual in a longitudinal cohort became infected, and for how long this infection lasted.

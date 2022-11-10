@@ -1,14 +1,14 @@
 
 #------------------------------------------------
-#' @title Check that Tapestry package has loaded successfully
+#' @title Check that Rambler package has loaded successfully
 #'
-#' @description Simple function to check that Tapestry package has loaded 
-#'   successfully. Prints "Tapestry loaded successfully!" if so.
+#' @description Simple function to check that Rambler package has loaded 
+#'   successfully. Prints "Rambler loaded successfully!" if so.
 #'
 #' @export
 
-check_tapestry_loaded <- function() {
-  message("Tapestry loaded successfully!")
+check_rambler_loaded <- function() {
+  message("Rambler loaded successfully!")
 }
 
 #------------------------------------------------
