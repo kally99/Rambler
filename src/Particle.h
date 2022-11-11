@@ -2,8 +2,8 @@
 #pragma once
 
 #include "System.h"
-#include "misc_v15.h"
-#include "probability_v17.h"
+#include "misc_v16.h"
+#include "probability_v18.h"
 
 #include <Rcpp.h>
 
@@ -18,13 +18,17 @@ public:
   System * s_ptr;
   
   // model parameters
-  std::vector<double> mu;
-  double sigma;
-  double w;
+  std::vector<std::vector<double>> time_inf;
+  
+  // proposal objects
+  std::vector<double> time_inf_prop;
   
   // likelihood and prior
+  std::vector<double> loglike_ind;
+  std::vector<double> logprior_ind;
   double loglike;
   double logprior;
+  
   
   // PUBLIC FUNCTIONS
   
@@ -35,12 +39,11 @@ public:
   void init(System &s);
   
   // likelihood and prior
-  double get_loglike(std::vector<double> mu, double sigma, double w);
-  double get_logprior(std::vector<double> mu, double sigma, double w);
+  double get_loglike_ind(int ind, const std::vector<double> &time_inf);
+  double get_logprior_ind(int ind, const std::vector<double> &time_inf);
   
   // update functions
   void update(double beta);
-  void update_mu(double beta);
-  void update_sigma(double beta);
+  void MH_time_inf(double beta);
   
 };

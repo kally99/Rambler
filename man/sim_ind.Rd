@@ -6,6 +6,19 @@
 \usage{
 sim_ind(samp_time, haplo_freqs, lambda, decay_rate, sens)
 }
+\arguments{
+\item{samp_time}{vector of times at which samples were sequenced.}
+
+\item{haplo_freqs}{vector giving the probability that each haplotype is
+transmitted in a given infectious bite (not quite the same thing as
+haplotype frequencies in the population).}
+
+\item{lambda}{vector of FOI in each individual.}
+
+\item{decay_rate}{rate at which each haplotype clears.}
+
+\item{sens}{sensitivity of sequencing (assumed the same for all haplotypes).}
+}
 \description{
 Simulate a single individual from the generative model. Returns outpus as
 }

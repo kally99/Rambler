@@ -28,7 +28,8 @@ Rcpp::List run_mcmc_cpp(Rcpp::List args_data, Rcpp::List args_params,
   double t_diff = chrono_timer(t0, "chain completed in ", "\n", !mcmc.silent);
   
   // return outputs in list
-  Rcpp::List ret = Rcpp::List::create(Rcpp::Named("foo") = -9,
+  Rcpp::List ret = Rcpp::List::create(Rcpp::Named("time_inf_burnin") = mcmc.time_inf_burnin,
+                                      Rcpp::Named("time_inf_sampling") = mcmc.time_inf_sampling,
                                       Rcpp::Named("t_diff") = t_diff);
   return ret;
 }

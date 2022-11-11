@@ -8,6 +8,15 @@
 # represented in inference - this is deliberate as it will allow us to check
 # that our different representations of the process are consistent
 #'
+#' @param samp_time vector of times at which samples were sequenced.
+#' @param haplo_freqs vector giving the probability that each haplotype is
+#'   transmitted in a given infectious bite (not quite the same thing as
+#'   haplotype frequencies in the population).
+#' @param lambda vector of FOI in each individual.
+#' @param decay_rate rate at which each haplotype clears.
+#' @param sens sensitivity of sequencing (assumed the same for all haplotypes).
+#'
+#' @importFrom stats rbinom rexp rpois runif
 #' @export
 
 sim_ind <- function(samp_time, haplo_freqs, lambda, decay_rate, sens) {
@@ -37,6 +46,7 @@ sim_ind <- function(samp_time, haplo_freqs, lambda, decay_rate, sens) {
   samp_period <- diff(range(samp_time))
   n_inf <- rpois(1, lambda*samp_period)
   t_inf <- sort(runif(n_inf, 0, samp_period))
+  t_end <- t_inf
   
   # loop through all new infections (if any present)
   for (k in seq_len(n_inf)) {
@@ -46,6 +56,9 @@ sim_ind <- function(samp_time, haplo_freqs, lambda, decay_rate, sens) {
     which_haplos <- which(rbinom(n_haplo, 1, haplo_freqs) == 1)
     for (j in seq_along(which_haplos)) {
       t_decay <- t_inf[k] + rexp(1, rate = decay_rate)
+      if (t_decay > t_end[k]) {
+        t_end[k] <- t_decay
+      }
       state_true[j, (samp_time > t_inf[k]) & (samp_time < t_decay)] <- 1
     }
   }
@@ -56,7 +69,8 @@ sim_ind <- function(samp_time, haplo_freqs, lambda, decay_rate, sens) {
   # return as list
   ret <- list(state_true = state_true,
               state_obs = state_obs,
-              t_inf = t_inf)
+              t_inf = t_inf,
+              t_end = t_end)
   return(ret)
 }
 
@@ -70,6 +84,10 @@ sim_ind <- function(samp_time, haplo_freqs, lambda, decay_rate, sens) {
 #'   data.frame. Also keeps hold of the true states of all individuals for
 #'   reference.
 #'
+#' @inheritParams sim_ind
+#' @param n number of individuals in cohort.
+#'
+#' @importFrom dplyr bind_rows
 #' @export
 
 sim_cohort <- function(n, samp_time, haplo_freqs, lambda, decay_rate, sens) {

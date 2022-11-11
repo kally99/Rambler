@@ -18,11 +18,23 @@ restructure_data <- function(df_data) {
   
   # basic checks
   assert_dataframe(df_data)
+  assert_in(c("ind", "haplo", "time", "positive"), names(df_data))
+  assert_pos_int(df_data$haplo)
+  assert_pos(df_data$time)
+  assert_in(df_data$positive, c(0, 1))
   
-  # TODO - further checks on format of data
+  # split into nested list over individuals then haplotypes. Only store observed
+  # positive status
+  dat_list <- mapply(function(x) {
+    mapply(function(y) {
+      y$positive
+    }, split(x, f = x$haplo), SIMPLIFY = FALSE)
+  }, split(df_data, df_data$ind), SIMPLIFY = FALSE)
   
   # return list
-  return(list())
+  ret <- list(dat_list = dat_list,
+              samp_time = unique(df_data$time))
+  return(ret)
 }
 
 #------------------------------------------------
@@ -38,6 +50,7 @@ restructure_data <- function(df_data) {
 #'   transmitted in a given infectious bite (not quite the same thing as
 #'   haplotype frequencies in the population).
 #' @param lambda vector of FOI in each individual.
+#' @param decay_rate rate at which each haplotype clears.
 #' @param sens sensitivity of sequencing (assumed the same for all haplotypes).
 #' @param burnin the number of burn-in iterations.
 #' @param samples the number of sampling iterations.
@@ -55,7 +68,8 @@ restructure_data <- function(df_data) {
 run_mcmc <- function(df_data,
                      haplo_freqs,
                      lambda,
-                     sens = 0.9,
+                     decay_rate,
+                     sens,
                      burnin = 1e2,
                      samples = 1e3,
                      beta = 1,
@@ -78,7 +92,9 @@ run_mcmc <- function(df_data,
   
   # make a list of model parameters
   args_params <- list(haplo_freqs = haplo_freqs,
-                      lambda = lambda)
+                      lambda = lambda,
+                      decay_rate = decay_rate,
+                      sens = sens)
   
   # make a list of MCMC parameters
   args_MCMC <- list(burnin = burnin,

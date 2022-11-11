@@ -8,7 +8,8 @@ run_mcmc(
   df_data,
   haplo_freqs,
   lambda,
-  sens = 0.9,
+  decay_rate,
+  sens,
   burnin = 100,
   samples = 1000,
   beta = 1,
@@ -25,6 +26,8 @@ transmitted in a given infectious bite (not quite the same thing as
 haplotype frequencies in the population).}
 
 \item{lambda}{vector of FOI in each individual.}
+
+\item{decay_rate}{rate at which each haplotype clears.}
 
 \item{sens}{sensitivity of sequencing (assumed the same for all haplotypes).}
 
