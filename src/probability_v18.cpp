@@ -1,6 +1,6 @@
 
-#include "probability_v17.h"
-#include "misc_v15.h"
+#include "probability_v18.h"
+#include "misc_v16.h"
 
 using namespace std;
 
@@ -139,14 +139,16 @@ double rnorm1_interval(double mean, double sd, double a, double b) {
 
   // reflect off boundries at 0 and (b-a)
   if (ret < 0 || ret > (b-a)) {
+    
     // use multiple reflections to bring into range [-(b-a), 2(b-a)]
-    while (ret < -(b-a)) {
-      ret += 2*(b-a);
+    if (ret < -(b - a)) {
+      int n_double_intervals = floor(-ret / (b - a)) / 2;
+      ret += 2 * (b - a) * (n_double_intervals + 1);
+    } else if (ret > 2*(b - a)) {
+      int n_double_intervals = floor(ret / (b - a) - 1) / 2;
+      ret -= 2 * (b - a) * (n_double_intervals + 1);
     }
-    while (ret > 2*(b-a)) {
-      ret -= 2*(b-a);
-    }
-
+    
     // use one more reflection to bring into range [0, (b-a)]
     if (ret < 0) {
       ret = -ret;

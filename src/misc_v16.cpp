@@ -1,5 +1,5 @@
 
-#include "misc_v15.h"
+#include "misc_v16.h"
 
 #include <math.h>
 #include <fstream>
@@ -387,6 +387,24 @@ vector<vector<vector<double>>> rcpp_to_array_double(Rcpp::List x) {
     ret[i] = vector<vector<double>>(n2);
     for (int j = 0; j < n2; ++j) {
       ret[i][j] = Rcpp::as<vector<double>>(x_i[j]);
+    }
+  }
+  return ret;
+}
+#endif
+
+//------------------------------------------------
+#ifdef RCPP_ACTIVE
+// converts input from Rcpp::List format to vector<vector<vector<bool>>> format.
+vector<vector<vector<bool>>> rcpp_to_array_bool(Rcpp::List x) {
+  int n1 = int(x.size());
+  vector<vector<vector<bool>>> ret(n1);
+  for (int i = 0; i < n1; ++i) {
+    Rcpp::List x_i = x[i];
+    int n2 = int(x_i.size());
+    ret[i] = vector<vector<bool>>(n2);
+    for (int j = 0; j < n2; ++j) {
+      ret[i][j] = Rcpp::as<vector<bool>>(x_i[j]);
     }
   }
   return ret;

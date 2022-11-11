@@ -366,6 +366,12 @@ std::vector<std::vector<std::vector<double>>> rcpp_to_array_double(Rcpp::List x)
 #endif
 
 //------------------------------------------------
+#ifdef RCPP_ACTIVE
+// converts input from Rcpp::List format to vector<vector<vector<bool>>> format.
+std::vector<std::vector<std::vector<bool>>> rcpp_to_array_bool(Rcpp::List x);
+#endif
+
+//------------------------------------------------
 // read values from comma-separated text file to vector<int>
 std::vector<int> file_to_vector_int(std::string file_path);
 
