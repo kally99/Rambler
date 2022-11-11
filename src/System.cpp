@@ -1,6 +1,6 @@
 
 #include "System.h"
-#include "misc_v15.h"
+#include "misc_v16.h"
 
 using namespace std;
 
@@ -9,40 +9,18 @@ using namespace std;
 void System::load(Rcpp::List args_data, Rcpp::List args_params) {
   
   // data
-  a = rcpp_to_vector_int(args_data["a"]);
-  r = rcpp_to_vector_int(args_data["r"]);
-  n_loci = a.size();
+  data_array = rcpp_to_array_bool(args_data["dat_list"]);
+  n_ind = data_array.size();
+  n_haplo = data_array[0].size();
+  samp_time = rcpp_to_vector_double(args_data["samp_time"]);
+  n_samp = samp_time.size();
+  samp_time_start = samp_time[0];
+  samp_time_end = samp_time[n_samp - 1];
   
   // other parameters
-  p = rcpp_to_vector_double(args_params["p"]);
-  c = args_params["c"];
+  haplo_freqs = rcpp_to_vector_double(args_params["haplo_freqs"]);
+  lambda = rcpp_to_vector_double(args_params["lambda"]);
+  decay_rate = args_params["decay_rate"];
+  sens = args_params["sens"];
   
-}
-
-//------------------------------------------------
-// initialise Beta-binomial likelihood lookup table for each locus
-void System::init_betabinom_lookup() {
-  
-  betabinom_lookup = vector<vector<double>>(n_loci, vector<double>(1001));
-  for (int i = 0; i < n_loci; ++i) {
-    double tmp0 = lgamma(a[i] + r[i] + 1) - lgamma(a[i] + 1) - lgamma(r[i] + 1);
-    double tmp1 = lgamma(c) - lgamma(a[i] + r[i] + c);
-    for (int j = 0; j < 1001; ++j) {
-      double pi_ = j / double(1000);
-      double tmp2 = lgamma(a[i] + pi_*c) - lgamma(pi_*c);
-      double tmp3 = lgamma(r[i] + (1.0 - pi_)*c) - lgamma((1.0 - pi_)*c);
-      betabinom_lookup[i][j] = exp(tmp0 + tmp1 + tmp2 + tmp3);
-    }
-  }
-  
-}
-
-//------------------------------------------------
-// get Beta-binomial likelihood for locus i at WSAF pi_
-double System::get_betabinom(int i, double pi_) {
-  
-  // convert pi_ to corresponding integer index for lookup table, and return
-  // value from table
-  int index = round(pi_*1000);
-  return betabinom_lookup[i][index];
 }

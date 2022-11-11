@@ -2,7 +2,7 @@
 #pragma once
 
 #include "System.h"
-#include "misc_v15.h"
+#include "misc_v16.h"
 #include "Particle.h"
 
 #include <Rcpp.h>
@@ -39,12 +39,8 @@ public:
   bool silent;
   
   // objects for storing results
-  std::vector<std::vector<double>> mu_burnin;
-  std::vector<double> sigma_burnin;
-  std::vector<double> w_burnin;
-  std::vector<std::vector<double>> mu_sampling;
-  std::vector<double> sigma_sampling;
-  std::vector<double> w_sampling;
+  std::vector<std::vector<std::vector<double>>> time_inf_burnin;
+  std::vector<std::vector<std::vector<double>>> time_inf_sampling;
   
   // progress bars
   Rcpp::List args_progress;
