@@ -47,7 +47,7 @@ void MCMC::run_mcmc_burnin(Rcpp::Function update_progress) {
   }
   
   // initialise objects for storing results
-  time_inf_burnin = vector<vector<vector<double>>>(burnin, vector<vector<double>>(s.n_ind, vector<double>(3)));
+  time_inf_burnin = vector<vector<vector<double>>>(burnin);
   
   // load initial values into store objects
   int r_cold = rungs - 1;
@@ -94,7 +94,7 @@ void MCMC::run_mcmc_burnin(Rcpp::Function update_progress) {
 void MCMC::run_mcmc_sampling(Rcpp::Function update_progress) {
   
   // initialise objects for storing results
-  time_inf_sampling = vector<vector<vector<double>>>(samples, vector<vector<double>>(s.n_ind, vector<double>(3)));
+  time_inf_sampling = vector<vector<vector<double>>>(samples);
   
   
   // ---------- sampling MCMC ----------

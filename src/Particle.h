@@ -45,5 +45,6 @@ public:
   // update functions
   void update(double beta);
   void MH_time_inf(double beta);
+  void split_merge_time_inf(double beta);
   
 };

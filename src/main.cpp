@@ -30,6 +30,8 @@ Rcpp::List run_mcmc_cpp(Rcpp::List args_data, Rcpp::List args_params,
   // return outputs in list
   Rcpp::List ret = Rcpp::List::create(Rcpp::Named("time_inf_burnin") = mcmc.time_inf_burnin,
                                       Rcpp::Named("time_inf_sampling") = mcmc.time_inf_sampling,
+                                      Rcpp::Named("MC_accept_burnin") = mcmc.MC_accept_burnin,
+                                      Rcpp::Named("MC_accept_sampling") = mcmc.MC_accept_sampling,
                                       Rcpp::Named("t_diff") = t_diff);
   return ret;
 }

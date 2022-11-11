@@ -11,7 +11,7 @@ void Particle::init(System &s) {
   s_ptr = &s;
   
   // initialise model parameters
-  time_inf = vector<vector<double>>(s_ptr->n_ind, vector<double>(3));
+  time_inf = vector<vector<double>>(s_ptr->n_ind, vector<double>(1));
   loglike_ind = vector<double>(s_ptr->n_ind);
   logprior_ind = vector<double>(s_ptr->n_ind);
   for (int i = 0; i < s_ptr->n_ind; ++i) {
@@ -172,7 +172,19 @@ double Particle::get_loglike_ind(int ind, const vector<double> &time_inf) {
 //------------------------------------------------
 // calculate logprior for a single individual
 double Particle::get_logprior_ind(int ind, const vector<double> &time_inf) {
-  return 0.0;
+  
+  // exponential waiting time between infections
+  double ret = 0.0;
+  double t0 = s_ptr->samp_time_start;
+  for (int i = 0; i < time_inf.size(); ++i) {
+    ret += log(s_ptr->lambda[ind]) - s_ptr->lambda[ind]*(time_inf[i] - t0);
+    t0 = time_inf[i];
+  }
+  
+  // chance of seeing no more infections until end of sampling period
+  ret += -s_ptr->lambda[ind]*(s_ptr->samp_time_end - t0);
+  
+  return ret;
 }
 
 //------------------------------------------------
@@ -181,6 +193,7 @@ void Particle::update(double beta) {
   
   // distinct update steps for each free parameter
   MH_time_inf(beta);
+  split_merge_time_inf(beta);
   
 }
 
@@ -240,5 +253,162 @@ void Particle::MH_time_inf(double beta) {
     
   } // end loop through individuals
   
+}
+
+//------------------------------------------------
+// propose new infection times by dropping an existing infection OR splitting an
+// existing interval to add a new infection
+void Particle::split_merge_time_inf(double beta) {
+  
+  // update all individuals
+  for (int i = 0; i < s_ptr->n_ind; ++i) {
+    
+    // copy over infection times
+    time_inf_prop = time_inf[i];
+    
+    // get number of infections
+    int n_inf = time_inf_prop.size();
+    
+    // draw whether split or merge step
+    if (rbernoulli1(0.5)) { // split
+      
+      // choose an interval at random with equal probability. Note that
+      // interval_index = 0 denotes the interval from start of sampling to the
+      // first infection. Therefore, the start time for subsequent intervals is
+      // time_inf_prop[interval_index - 1], i.e. we have to account for the fact
+      // we are effectively 1-indexed. Calculate t0 and t1 as the start and end
+      // times of the chosen interval
+      int interval_index = sample2(0, n_inf);
+      double t0 = (interval_index == 0) ? s_ptr->samp_time_start : time_inf_prop[interval_index - 1];
+      double t1 = (interval_index == n_inf) ? s_ptr->samp_time_end : time_inf_prop[interval_index];
+      
+      // propose a new infection time and slot this in at the correct place in
+      // the vector
+      double prop_time = runif1(t0, t1);
+      if (n_inf == 0) {
+        time_inf_prop.push_back(prop_time);
+      } else {
+        time_inf_prop.insert(time_inf_prop.begin() + interval_index, prop_time);
+      }
+      
+      // calculate new likelihood and prior
+      double loglike_prop = get_loglike_ind(i, time_inf_prop);
+      double logprior_prop = get_logprior_ind(i, time_inf_prop);
+      
+      // calculate forward and backward proposal probabilities
+      double logprop_forward = -log((n_inf + 1) * (t1 - t0));
+      double logprop_backward = -log(n_inf + 1);
+      
+      // calculate Metropolis-Hastings ratio
+      double MH = beta*(loglike_prop - loglike_ind[i]) + (logprior_prop - logprior_ind[i]) +
+        (logprop_backward - logprop_forward);
+      
+      double acceptance_linear = 1.0;
+      bool accept_move = true;
+      if (MH < 0) {
+        acceptance_linear = exp(MH);
+        accept_move = (runif_0_1() < acceptance_linear);
+      }
+      
+      // accept or reject move
+      if (accept_move) {
+        time_inf[i] = time_inf_prop;
+        loglike += loglike_prop - loglike_ind[i];
+        logprior += logprior_prop - logprior_ind[i];
+        loglike_ind[i] = loglike_prop;
+        logprior_ind[i] = logprior_prop;
+      }
+      
+    } else {  // merge
+      
+      // nothing to merge if no infections
+      if (n_inf == 0) {
+        continue;
+      }
+      
+      // choose an infection time at random with equal probability and drop this
+      // time. Note that interval_index now represents the index of the
+      // infection we are dropping, and so is 0-indexed
+      int interval_index = sample2(1, n_inf) - 1;
+      double t0 = (interval_index == 0) ? s_ptr->samp_time_start : time_inf_prop[interval_index - 1];
+      double t1 = (interval_index == (n_inf - 1)) ? s_ptr->samp_time_end : time_inf_prop[interval_index + 1];
+      
+      // drop infection and calculate new likelihood and prior
+      time_inf_prop.erase(time_inf_prop.begin() + interval_index);
+      double loglike_prop = get_loglike_ind(i, time_inf_prop);
+      double logprior_prop = get_logprior_ind(i, time_inf_prop);
+      
+      // calculate forward and backward proposal probabilities
+      double logprop_forward = -log(n_inf);
+      double logprop_backward = -log(n_inf * (t1 - t0));
+      
+      // calculate Metropolis-Hastings ratio
+      double MH = beta*(loglike_prop - loglike_ind[i]) + (logprior_prop - logprior_ind[i]) +
+        (logprop_backward - logprop_forward);
+      
+      double acceptance_linear = 1.0;
+      bool accept_move = true;
+      if (MH < 0) {
+        acceptance_linear = exp(MH);
+        accept_move = (runif_0_1() < acceptance_linear);
+      }
+      
+      // accept or reject move
+      if (accept_move) {
+        time_inf[i] = time_inf_prop;
+        loglike += loglike_prop - loglike_ind[i];
+        logprior += logprior_prop - logprior_ind[i];
+        loglike_ind[i] = loglike_prop;
+        logprior_ind[i] = logprior_prop;
+      }
+      
+    }
+  } // end loop over individuals
+    
+    
+    /*
+    // copy over infection times
+    time_inf_prop = time_inf[i];
+    
+    // loop through infections
+    for (int j = 0; j < n_inf; ++j) {
+      
+      // get start and end times of proposal interval. This runs from the
+      // previous to the next infection, but is truncated at the start and end
+      // times of sampling
+      double t0 = (j == 0) ? s_ptr->samp_time_start : time_inf_prop[j - 1];
+      double t1 = (j == (n_inf - 1)) ? s_ptr->samp_time_end : time_inf_prop[j + 1];
+      
+      // propose new infection time by drawing from reflected normal within
+      // interval
+      time_inf_prop[j] = rnorm1_interval(time_inf_prop[j], 1.0, t0, t1);
+      
+      double loglike_prop = get_loglike_ind(i, time_inf_prop);
+      double logprior_prop = get_logprior_ind(i, time_inf_prop);
+      
+      // calculate Metropolis-Hastings ratio
+      double MH = beta*(loglike_prop - loglike_ind[i]) + (logprior_prop - logprior_ind[i]);
+      
+      double acceptance_linear = 1.0;
+      bool accept_move = true;
+      if (MH < 0) {
+        acceptance_linear = exp(MH);
+        accept_move = (runif_0_1() < acceptance_linear);
+      }
+      
+      // accept or reject move
+      if (accept_move) {
+        time_inf[i][j] = time_inf_prop[j];
+        loglike += loglike_prop - loglike_ind[i];
+        logprior += logprior_prop - logprior_ind[i];
+        loglike_ind[i] = loglike_prop;
+        logprior_ind[i] = logprior_prop;
+      } else {
+        time_inf_prop[j] = time_inf[i][j];
+      }
+    }
+    
+  } // end loop through individuals
+  */
 }
 

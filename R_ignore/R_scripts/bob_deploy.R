@@ -26,17 +26,17 @@
 library(dplyr)
 library(ggplot2)
 
-set.seed(4)
+set.seed(3)
 
 # ------------------------------------------------------------------
 
 # make up some data
 n_ind <- 20
 n_haplo <- 10
-samp_time <- seq(0, 20, 1)
+samp_time <- seq(0, 40, 2)
 n_samp <- length(samp_time)
 haplo_freqs <- rep(3 / n_haplo, n_haplo)
-lambda <- rep(0.04, n_ind)
+lambda <- rep(0.05, n_ind)
 decay_rate <- 0.2
 sens <- 0.9
 
@@ -62,31 +62,61 @@ df_data %>%
   scale_fill_viridis_c() +
   geom_point(aes(x = t_inf, y = ind), col = "white", size = 0.7, data = t_inf_df) +
   geom_segment(aes(x = t_inf, xend = t_end, y = ind, yend = ind), col = "white",
-               alpha = 0.5, data = t_inf_df)
+               alpha = 0.5, data = t_inf_df) +
+  xlab("Time") + ylab("Individual")
+
+#ggsave("/Users/rverity/Desktop/COI_plot.png")
 
 # run MCMC
+burnin <- 1e2
+samples <- 1e3
 my_mcmc <- run_mcmc(df_data = df_data,
                     haplo_freqs = haplo_freqs,
                     lambda = lambda,
                     decay_rate,
                     sens = sens,
-                    burnin = 1e2,
-                    samples = 1e3)
+                    burnin = burnin,
+                    samples = samples)
 
 
-i <- 9
-z <- t(mapply(function(x) x[[i]], my_mcmc$time_inf_sampling))
-plot(z[,1], type = 'l', ylim = range(samp_time))
-lines(z[,2], col = 2)
-lines(z[,3], col = 3)
-abline(h = dat_list$raw_list[[i]]$t_inf, lty = 3)
-dat_list$raw_list[[i]]$t_inf
+# trace plot
+i <- 14
+my_mcmc$output %>%
+  filter(phase == "sampling" & ind == i) %>%
+  ggplot() + theme_bw() +
+  geom_point(aes(x = iteration, y = value, color = param)) +
+  ylim(range(samp_time)) +
+  geom_hline(yintercept = dat_list$raw_list[[i]]$t_inf, linetype = "dashed") +
+  xlab("Iteration") + ylab("Infection time")
+
+#ggsave("/Users/rverity/Desktop/trace_plot.png")
+
+# get bandwidth over all samples together
+bw <- my_mcmc$output %>%
+  filter(phase == "sampling") %>%
+  pull(value) %>%
+  bw.nrd0()
+
+# get kernel density over all individuals
+df_density <- my_mcmc$output %>%
+  filter(phase == "sampling") %>%
+  group_by(param, ind) %>%
+  summarise(param = param[1],
+            ind = ind[1],
+            x = seq(first(samp_time), last(samp_time), l = 201),
+            y = length(value) / samples * density(value, from = first(samp_time), to = last(samp_time), n = 201, bw = 0.5)$y)
+
+# plot
+df_density %>%
+  ggplot() + theme_bw() +
+  geom_area(aes(x = x, y = y, fill = param)) +
+  facet_wrap(~ind) +
+  geom_segment(aes(x = t_inf, xend = t_inf, y = 0.2, yend = 0),
+               arrow = arrow(length = unit(0.1, "npc")), data = t_inf_df) +
+  xlab("Time") + ylab("Posterior probability")
+
+#ggsave("/Users/rverity/Desktop/density_plot.png")
 
 
-plot(my_mcmc$diagnostics$MC_accept_burnin, ylim = c(0, 1))
-plot(my_mcmc$diagnostics$MC_accept_sampling, ylim = c(0, 1))
-
-# have a look at output
-head(my_mcmc$draws)
-tail(my_mcmc$draws)
-
+#plot(my_mcmc$diagnostics$MC_accept_burnin, ylim = c(0, 1))
+#plot(my_mcmc$diagnostics$MC_accept_sampling, ylim = c(0, 1))

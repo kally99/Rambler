@@ -78,15 +78,19 @@ run_mcmc <- function(df_data,
   
   # check data format, and restruture into format expected by C++
   data_processed <- restructure_data(df_data)
+  n_ind <- length(data_processed$dat_list)
+  n_haplo <- length(data_processed$dat_list[[1]])
+  n_samp <- length(data_processed$samp_time)
   
   # check inputs
   assert_vector_bounded(haplo_freqs)
   assert_vector_pos(lambda)
-  
+  assert_single_pos(decay_rate)
+  assert_single_bounded(sens)
   assert_single_pos_int(burnin, zero_allowed = FALSE)
   assert_single_pos_int(samples, zero_allowed = FALSE)
   assert_vector_bounded(beta)
-  #assert_eq(beta[length(beta)], 1)   # TODO - uncomment to force final rung to be true likelihood
+  assert_eq(beta[length(beta)], 1)
   assert_single_logical(pb_markdown)
   assert_single_logical(silent)
   
@@ -118,32 +122,28 @@ run_mcmc <- function(df_data,
   output_raw <- run_mcmc_cpp(data_processed, args_params, args_MCMC,
                              args_progress, args_functions)
   
-  return(output_raw)
+  #return(output_raw)
   
   # ---------- process output ----------
   
-  # get parameters draws from burn-in phase into data.frame
-  df_burnin <- do.call(rbind, output_raw$mu_burnin) %>%
-    as.data.frame() %>%
-    setNames(sprintf("mu_%s", 1:2)) %>%
-    dplyr::mutate(phase = "burnin",
-                  iteration = 1:burnin,
-                  .before = 1) %>%
-    dplyr::mutate(sigma = output_raw$sigma_burnin,
-                  w = output_raw$w_burnin)
-  
-  # equivalent for sampling phase
-  df_sampling <- do.call(rbind, output_raw$mu_sampling) %>%
-    as.data.frame() %>%
-    setNames(sprintf("mu_%s", 1:2)) %>%
-    dplyr::mutate(phase = "sampling",
-                  iteration = burnin + 1:samples,
-                  .before = 1) %>%
-    dplyr::mutate(sigma = output_raw$sigma_sampling,
-                  w = output_raw$w_sampling)
+  # get dataframe of infection times for all individuals. Note that the number
+  # of infection events can change from one iteration to the next, hence this is
+  # in long form
+  time_inf_list <- c(output_raw$time_inf_burnin,
+                     output_raw$time_inf_sampling)
+  df_time_inf <- mapply(function(i) {
+    x <- time_inf_list[[i]]
+    lx <- mapply(length, x)
+    data.frame(phase = ifelse(i <= burnin, "burnin", "sampling"),
+               iteration = i,
+               ind = rep(1:n_ind, times = lx),
+               param = sprintf("inf_time_%s", unlist(mapply(seq_len, lx))),
+               value = unlist(x))
+  }, seq_along(time_inf_list), SIMPLIFY = FALSE) %>%
+    bind_rows()
   
   # return
-  ret <- list(draws = rbind(df_burnin, df_sampling),
+  ret <- list(output = df_time_inf,
               diagnostics = list(MC_accept_burnin = output_raw$MC_accept_burnin / burnin,
                                  MC_accept_sampling = output_raw$MC_accept_sampling / samples))
   return(ret)
