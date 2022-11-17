@@ -34,6 +34,13 @@ public:
   // vector of particles
   std::vector<Particle> particle_vec;
   
+  // proposal bandwidths
+  std::vector<double> time_inf_bw;
+  std::vector<double> decay_rate_bw;
+  std::vector<std::vector<double>> lambda_bw;
+  std::vector<double> sens_bw;
+  std::vector<double> theta_bw;
+  
   // misc parameters
   bool pb_markdown;
   bool silent;
@@ -41,6 +48,14 @@ public:
   // objects for storing results
   std::vector<std::vector<std::vector<double>>> time_inf_burnin;
   std::vector<std::vector<std::vector<double>>> time_inf_sampling;
+  std::vector<std::vector<double>> lambda_burnin;
+  std::vector<std::vector<double>> lambda_sampling;
+  std::vector<double> decay_rate_burnin;
+  std::vector<double> decay_rate_sampling;
+  std::vector<double> sens_burnin;
+  std::vector<double> sens_sampling;
+  std::vector<double> theta_burnin;
+  std::vector<double> theta_sampling;
   
   // progress bars
   Rcpp::List args_progress;

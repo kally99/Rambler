@@ -20,6 +20,13 @@ MCMC::MCMC(Rcpp::List args_data, Rcpp::List args_params, Rcpp::List args_MCMC,
   beta = rcpp_to_vector_double(args_MCMC["beta"]);
   rungs = beta.size();
   
+  // initialise proposal bandidth vectors over all particles
+  time_inf_bw = vector<double>(rungs, 1.0);
+  decay_rate_bw = vector<double>(rungs, 1.0);
+  lambda_bw = vector<vector<double>>(rungs, vector<double>(s.n_ind, 1.0));
+  sens_bw = vector<double>(rungs, 1.0);
+  theta_bw = vector<double>(rungs, 1.0);
+  
   // extract misc parameters
   pb_markdown = args_MCMC["pb_markdown"];
   silent = args_MCMC["silent"];
@@ -48,10 +55,18 @@ void MCMC::run_mcmc_burnin(Rcpp::Function update_progress) {
   
   // initialise objects for storing results
   time_inf_burnin = vector<vector<vector<double>>>(burnin);
+  lambda_burnin = vector<vector<double>>(burnin, vector<double>(s.n_ind));
+  decay_rate_burnin = vector<double>(burnin);
+  sens_burnin = vector<double>(burnin);
+  theta_burnin = vector<double>(burnin);
   
   // load initial values into store objects
   int r_cold = rungs - 1;
   time_inf_burnin[0] = particle_vec[r_cold].time_inf;
+  lambda_burnin[0] = particle_vec[r_cold].lambda;
+  decay_rate_burnin[0] = particle_vec[r_cold].decay_rate;
+  sens_burnin[0] = particle_vec[r_cold].sens;
+  theta_burnin[0] = particle_vec[r_cold].theta;
   
   
   // ---------- burn-in MCMC ----------
@@ -70,7 +85,8 @@ void MCMC::run_mcmc_burnin(Rcpp::Function update_progress) {
     // loop through rungs and update particles
     for (int i = 0; i < rungs; ++i) {
       int r = rung_order[i];
-      particle_vec[r].update(beta[i]);
+      particle_vec[r].update(beta[i], time_inf_bw[i], lambda_bw[i], decay_rate_bw[i],
+                             sens_bw[i], theta_bw[i], rep, true);
     }
     
     // perform Metropolis coupling
@@ -79,6 +95,10 @@ void MCMC::run_mcmc_burnin(Rcpp::Function update_progress) {
     // store results
     int r_cold = rung_order[rungs - 1];
     time_inf_burnin[rep] = particle_vec[r_cold].time_inf;
+    lambda_burnin[rep] = particle_vec[r_cold].lambda;
+    decay_rate_burnin[rep] = particle_vec[r_cold].decay_rate;
+    sens_burnin[rep] = particle_vec[r_cold].sens;
+    theta_burnin[rep] = particle_vec[r_cold].theta;
     
     // update progress bars
     if (!silent) {
@@ -95,6 +115,10 @@ void MCMC::run_mcmc_sampling(Rcpp::Function update_progress) {
   
   // initialise objects for storing results
   time_inf_sampling = vector<vector<vector<double>>>(samples);
+  lambda_sampling = vector<vector<double>>(samples, vector<double>(s.n_ind));
+  decay_rate_sampling = vector<double>(samples);
+  sens_sampling = vector<double>(samples);
+  theta_sampling = vector<double>(samples);
   
   
   // ---------- sampling MCMC ----------
@@ -110,7 +134,8 @@ void MCMC::run_mcmc_sampling(Rcpp::Function update_progress) {
     // loop through rungs and update particles
     for (int i = 0; i < rungs; ++i) {
       int r = rung_order[i];
-      particle_vec[r].update(beta[i]);
+      particle_vec[r].update(beta[i], time_inf_bw[i], lambda_bw[i], decay_rate_bw[i],
+                             sens_bw[i], theta_bw[i], rep, false);
     }
     
     // perform Metropolis coupling
@@ -119,6 +144,10 @@ void MCMC::run_mcmc_sampling(Rcpp::Function update_progress) {
     // store results
     int r_cold = rung_order[rungs - 1];
     time_inf_sampling[rep] = particle_vec[r_cold].time_inf;
+    lambda_sampling[rep] = particle_vec[r_cold].lambda;
+    decay_rate_sampling[rep] = particle_vec[r_cold].decay_rate;
+    sens_sampling[rep] = particle_vec[r_cold].sens;
+    theta_sampling[rep] = particle_vec[r_cold].theta;
     
     // update progress bars
     if (!silent) {

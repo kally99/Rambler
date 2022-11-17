@@ -1,7 +1,7 @@
 #include <Rcpp.h>
 
 #include "misc_v16.h"
-#include "probability_v18.h"
+#include "probability_v19.h"
 
 //------------------------------------------------
 // run basic example mcmc

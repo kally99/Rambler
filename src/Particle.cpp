@@ -10,10 +10,8 @@ void Particle::init(System &s) {
   // pointer to system object
   s_ptr = &s;
   
-  // initialise model parameters
+  // initialise infection times
   time_inf = vector<vector<double>>(s_ptr->n_ind, vector<double>(1));
-  loglike_ind = vector<double>(s_ptr->n_ind);
-  logprior_ind = vector<double>(s_ptr->n_ind);
   for (int i = 0; i < s_ptr->n_ind; ++i) {
     
     // draw infection times uniformly over sampling period and place in
@@ -22,21 +20,35 @@ void Particle::init(System &s) {
       time_inf[i][j] = runif1(s_ptr->samp_time_start, s_ptr->samp_time_end);
     }
     sort(time_inf[i].begin(), time_inf[i].end());
-    
-    // calculate loglikelihood and logprior for this individual
-    loglike_ind[i] = get_loglike_ind(i, time_inf[i]);
-    logprior_ind[i] = get_logprior_ind(i, time_inf[i]);
+  }
+  
+  // initialise lambda (force of infection) and other scalars
+  lambda = vector<double>(s_ptr->n_ind, 0.1);
+  decay_rate = 0.2;
+  sens = 0.9;
+  theta = 1.0;
+  mu = -2.0;
+  sigma = 3.0;
+  
+  // calculate initial likelihoods and priors
+  loglike_ind = vector<double>(s_ptr->n_ind);
+  logprior = get_logprior_decay_rate(decay_rate) + get_logprior_sens(sens) +
+    + get_logprior_theta(theta) + get_logprior_mu(mu) + get_logprior_sigma(sigma);
+  for (int i = 0; i < s_ptr->n_ind; ++i) {
+    loglike_ind[i] = get_loglike_ind(i, lambda[i], decay_rate, sens, theta, time_inf[i]);
+    logprior += get_logprior_lambda(lambda[i]) + get_logprior_time_inf(time_inf[i], lambda[i]);
   }
   loglike = sum(loglike_ind);
-  logprior = sum(logprior_ind);
   
   // initialise proposal objects
   time_inf_prop = vector<double>(time_inf[0].size());
+  loglike_ind_prop = vector<double>(s.n_ind);
 }
 
 //------------------------------------------------
 // calculate loglikelihood for a single individual
-double Particle::get_loglike_ind(int ind, const vector<double> &time_inf) {
+double Particle::get_loglike_ind(int ind, double lambda, double decay_rate,
+                                 double sens, double theta, const vector<double> &time_inf) {
   
   // the final likelihood for this individual will be the product over all
   // haplotypes, and all time series of observations for this haplotype. This
@@ -56,14 +68,14 @@ double Particle::get_loglike_ind(int ind, const vector<double> &time_inf) {
     
     // calculate the probability of initialising in the positive state, based on
     // relative rates of infection and clearance
-    double prob_init_positive = s_ptr->lambda[ind]*s_ptr->haplo_freqs[j] / (s_ptr->lambda[ind]*s_ptr->haplo_freqs[j] + s_ptr->decay_rate);
+    double prob_init_positive = lambda*theta*s_ptr->haplo_freqs[j] / (lambda*theta*s_ptr->haplo_freqs[j] + decay_rate);
     
     // forward_positive will store the joint probability of 1) being in the
     // positive state at the current time, and 2) the probability of all data up
     // to and including the current time. forward_negative does the same for the
     // negative state. These will be updated as we walk through the HMM, but for
     // now should hold the probabilities at initialisation
-    double forward_positive = (s_ptr->data_array[ind][j][0] == 1) ? prob_init_positive * s_ptr->sens : prob_init_positive * (1 - s_ptr->sens);
+    double forward_positive = (s_ptr->data_array[ind][j][0] == 1) ? prob_init_positive * sens : prob_init_positive * (1 - sens);
     double forward_negative = (s_ptr->data_array[ind][j][0] == 1) ? 0 : (1 - prob_init_positive);
     
     // as we walk through the HMM we will focus on sequential time intervals.
@@ -95,9 +107,9 @@ double Particle::get_loglike_ind(int ind, const vector<double> &time_inf) {
           // negative (0) states, acccounting for the possibility that the
           // haplotype is introduced within this infection
           t1 = time_inf[inf_index];
-          double trans_11 = s_ptr->haplo_freqs[j] + (1 - s_ptr->haplo_freqs[j])*exp(-s_ptr->decay_rate*(t1 - t0));
+          double trans_11 = theta*s_ptr->haplo_freqs[j] + (1 - theta*s_ptr->haplo_freqs[j])*exp(-decay_rate*(t1 - t0));
           double trans_10 = 1 - trans_11;
-          double trans_01 = s_ptr->haplo_freqs[j];
+          double trans_01 = theta*s_ptr->haplo_freqs[j];
           double trans_00 = 1 - trans_01;
           
           // calculate new forward positive and negative probabilities. Note
@@ -138,19 +150,19 @@ double Particle::get_loglike_ind(int ind, const vector<double> &time_inf) {
       // transition probabilities from the positive state (note that if in
       // negative state we can only remain there)
       t1 = s_ptr->samp_time[k];
-      double trans_11 = exp(-s_ptr->decay_rate*(t1 - t0));
+      double trans_11 = exp(-decay_rate*(t1 - t0));
       double trans_10 = 1 - trans_11;
       
       // update forward positive and negative probabilities, taking account the
       // observed data. As above, do this in a way that avoids underflow
-      double forward_positive_prop = (s_ptr->data_array[ind][j][k] == 1) ? forward_positive*trans_11*s_ptr->sens : forward_positive*trans_11*(1 - s_ptr->sens);
+      double forward_positive_prop = (s_ptr->data_array[ind][j][k] == 1) ? forward_positive*trans_11*sens : forward_positive*trans_11*(1 - sens);
       double forward_negative_prop = (s_ptr->data_array[ind][j][k] == 1) ? 0 : forward_positive*trans_10 + forward_negative;
       if ((forward_positive_prop + forward_negative_prop) < 1e-200) {
         double forward_sum = forward_positive + forward_negative;
         loglike_running += log(forward_sum);
         forward_positive /= forward_sum;
         forward_negative /= forward_sum;
-        forward_positive_prop = (s_ptr->data_array[ind][j][k] == 1) ? forward_positive*trans_11*s_ptr->sens : forward_positive*trans_11*(1 - s_ptr->sens);
+        forward_positive_prop = (s_ptr->data_array[ind][j][k] == 1) ? forward_positive*trans_11*sens : forward_positive*trans_11*(1 - sens);
         forward_negative_prop = (s_ptr->data_array[ind][j][k] == 1) ? 0 : forward_positive*trans_10 + forward_negative;
       }
       forward_positive = forward_positive_prop;
@@ -170,36 +182,77 @@ double Particle::get_loglike_ind(int ind, const vector<double> &time_inf) {
 }
 
 //------------------------------------------------
-// calculate logprior for a single individual
-double Particle::get_logprior_ind(int ind, const vector<double> &time_inf) {
+// calculate logprior of infection times for a single individual
+double Particle::get_logprior_time_inf(const vector<double> &time_inf, double lambda) {
   
-  // exponential waiting time between infections
-  double ret = 0.0;
-  double t0 = s_ptr->samp_time_start;
-  for (int i = 0; i < time_inf.size(); ++i) {
-    ret += log(s_ptr->lambda[ind]) - s_ptr->lambda[ind]*(time_inf[i] - t0);
-    t0 = time_inf[i];
-  }
-  
-  // chance of seeing no more infections until end of sampling period
-  ret += -s_ptr->lambda[ind]*(s_ptr->samp_time_end - t0);
+  // the product of exponential waiting time between infections turns out to be
+  // equal to the Poisson probability of seeing this many infections over the
+  // entire time interval. The N! term is missing from the denominator because
+  // we are dealing with an ordered sequence (time must be increasing over the
+  // vector)
+  int n_inf = time_inf.size();
+  double ret = n_inf*log(lambda) - lambda*(s_ptr->samp_time_end - s_ptr->samp_time_start);
   
   return ret;
 }
 
 //------------------------------------------------
+// calculate logprior of lambda
+double Particle::get_logprior_lambda(double lambda) {
+  return dlnorm1(lambda, mu, sigma, true);
+}
+
+//------------------------------------------------
+// calculate logprior of decay_rate
+double Particle::get_logprior_decay_rate(double decay_rate) {
+  return dlnorm1(decay_rate, s_ptr->decay_rate_meanlog, s_ptr->decay_rate_sdlog, true);
+}
+
+//------------------------------------------------
+// calculate logprior of sens
+double Particle::get_logprior_sens(double sens) {
+  return dbeta1(sens, s_ptr->sens_shape1, s_ptr->sens_shape2, true);
+}
+
+//------------------------------------------------
+// calculate logprior of theta
+double Particle::get_logprior_theta(double theta) {
+  return 0.0;
+  //return dbeta1(theta, s_ptr->theta_shape1, s_ptr->theta_shape2, true);
+}
+
+//------------------------------------------------
+// calculate logprior of mu
+double Particle::get_logprior_mu(double mu) {
+  return dnorm1(mu, s_ptr->mu_mean, s_ptr->mu_sd, true);
+}
+
+//------------------------------------------------
+// calculate logprior of sigma
+double Particle::get_logprior_sigma(double sigma) {
+  return dinvgamma1(sigma, s_ptr->sigma_shape, s_ptr->sigma_scale, true);
+}
+
+//------------------------------------------------
 // propose new parameter values and accept/reject
-void Particle::update(double beta) {
+void Particle::update(double beta, double &time_inf_bw, vector<double> &lambda_bw,
+                      double &decay_rate_bw, double &sens_bw, double &theta_bw,
+                      int rep, bool Robbins_Monro) {
   
   // distinct update steps for each free parameter
-  MH_time_inf(beta);
+  MH_time_inf(beta, time_inf_bw, rep, Robbins_Monro);
   split_merge_time_inf(beta);
-  
+  MH_lambda(beta, lambda_bw, rep, Robbins_Monro);
+  MH_decay_rate(beta, decay_rate_bw, rep, Robbins_Monro);
+  MH_sens(beta, sens_bw, rep, Robbins_Monro);
+  //MH_theta(beta, theta_bw, rep, Robbins_Monro);
+  //Gibbs_mu();
+  //Gibbs_sigma();
 }
 
 //------------------------------------------------
 // Metropolis-Hastings on infection times for all individuals
-void Particle::MH_time_inf(double beta) {
+void Particle::MH_time_inf(double beta, double &time_inf_bw, int rep, bool Robbins_Monro) {
   
   // update all individuals
   for (int i = 0; i < s_ptr->n_ind; ++i) {
@@ -224,14 +277,16 @@ void Particle::MH_time_inf(double beta) {
       
       // propose new infection time by drawing from reflected normal within
       // interval
-      time_inf_prop[j] = rnorm1_interval(time_inf_prop[j], 1.0, t0, t1);
+      time_inf_prop[j] = rnorm1_interval(time_inf_prop[j], time_inf_bw, t0, t1);
       
-      double loglike_prop = get_loglike_ind(i, time_inf_prop);
-      double logprior_prop = get_logprior_ind(i, time_inf_prop);
+      double loglike_prop = get_loglike_ind(i, lambda[i], decay_rate, sens, theta, time_inf_prop);
+      double logprior_prop = logprior - get_logprior_time_inf(time_inf[i], lambda[i]) +
+        get_logprior_time_inf(time_inf_prop, lambda[i]);
       
       // calculate Metropolis-Hastings ratio
-      double MH = beta*(loglike_prop - loglike_ind[i]) + (logprior_prop - logprior_ind[i]);
+      double MH = beta*(loglike_prop - loglike_ind[i]) + (logprior_prop - logprior);
       
+      // accept or reject move
       double acceptance_linear = 1.0;
       bool accept_move = true;
       if (MH < 0) {
@@ -239,15 +294,35 @@ void Particle::MH_time_inf(double beta) {
         accept_move = (runif_0_1() < acceptance_linear);
       }
       
-      // accept or reject move
+      // implement move
       if (accept_move) {
         time_inf[i][j] = time_inf_prop[j];
         loglike += loglike_prop - loglike_ind[i];
-        logprior += logprior_prop - logprior_ind[i];
         loglike_ind[i] = loglike_prop;
-        logprior_ind[i] = logprior_prop;
+        logprior = logprior_prop;
+        
+        // Robbins-Monro positive update (on the log scale)
+        if (Robbins_Monro) {
+          time_inf_bw = exp(log(time_inf_bw) + s_ptr->MH_stepsize*(1 - s_ptr->MH_target_acceptance) / sqrt(rep + 1));
+          
+          // limit maximum size of bandwidth. When the log-likelihood is
+          // completely flat (i.e. in the hottest chain) every move will be
+          // accepted. So if we don't limit bandwidth then it will grow
+          // indefinitely. Note that this is not a problem for some other
+          // parameters as the prior limits the distribution, but here the prior
+          // is uniform which creates the problem
+          if (time_inf_bw > 10*(s_ptr->samp_time_end - s_ptr->samp_time_start)) {
+            time_inf_bw = 10*(s_ptr->samp_time_end - s_ptr->samp_time_start);
+          }
+        }
+        
       } else {
         time_inf_prop[j] = time_inf[i][j];
+        
+        // Robbins-Monro negative update (on the log scale)
+        if (Robbins_Monro) {
+          time_inf_bw = exp(log(time_inf_bw) - s_ptr->MH_stepsize*s_ptr->MH_target_acceptance / sqrt(rep + 1));
+        }
       }
     }
     
@@ -292,17 +367,19 @@ void Particle::split_merge_time_inf(double beta) {
       }
       
       // calculate new likelihood and prior
-      double loglike_prop = get_loglike_ind(i, time_inf_prop);
-      double logprior_prop = get_logprior_ind(i, time_inf_prop);
+      double loglike_prop = get_loglike_ind(i, lambda[i], decay_rate, sens, theta, time_inf_prop);
+      double logprior_prop = logprior - get_logprior_time_inf(time_inf[i], lambda[i]) +
+        get_logprior_time_inf(time_inf_prop, lambda[i]);
       
       // calculate forward and backward proposal probabilities
       double logprop_forward = -log((n_inf + 1) * (t1 - t0));
       double logprop_backward = -log(n_inf + 1);
       
       // calculate Metropolis-Hastings ratio
-      double MH = beta*(loglike_prop - loglike_ind[i]) + (logprior_prop - logprior_ind[i]) +
+      double MH = beta*(loglike_prop - loglike_ind[i]) + (logprior_prop - logprior) +
         (logprop_backward - logprop_forward);
       
+      // accept or reject move
       double acceptance_linear = 1.0;
       bool accept_move = true;
       if (MH < 0) {
@@ -310,13 +387,12 @@ void Particle::split_merge_time_inf(double beta) {
         accept_move = (runif_0_1() < acceptance_linear);
       }
       
-      // accept or reject move
+      // implement move
       if (accept_move) {
         time_inf[i] = time_inf_prop;
         loglike += loglike_prop - loglike_ind[i];
-        logprior += logprior_prop - logprior_ind[i];
         loglike_ind[i] = loglike_prop;
-        logprior_ind[i] = logprior_prop;
+        logprior = logprior_prop;
       }
       
     } else {  // merge
@@ -335,17 +411,19 @@ void Particle::split_merge_time_inf(double beta) {
       
       // drop infection and calculate new likelihood and prior
       time_inf_prop.erase(time_inf_prop.begin() + interval_index);
-      double loglike_prop = get_loglike_ind(i, time_inf_prop);
-      double logprior_prop = get_logprior_ind(i, time_inf_prop);
+      double loglike_prop = get_loglike_ind(i, lambda[i], decay_rate, sens, theta, time_inf_prop);
+      double logprior_prop = logprior - get_logprior_time_inf(time_inf[i], lambda[i]) +
+        get_logprior_time_inf(time_inf_prop, lambda[i]);
       
       // calculate forward and backward proposal probabilities
       double logprop_forward = -log(n_inf);
       double logprop_backward = -log(n_inf * (t1 - t0));
       
       // calculate Metropolis-Hastings ratio
-      double MH = beta*(loglike_prop - loglike_ind[i]) + (logprior_prop - logprior_ind[i]) +
+      double MH = beta*(loglike_prop - loglike_ind[i]) + (logprior_prop - logprior) +
         (logprop_backward - logprop_forward);
       
+      // accept or reject move
       double acceptance_linear = 1.0;
       bool accept_move = true;
       if (MH < 0) {
@@ -353,62 +431,280 @@ void Particle::split_merge_time_inf(double beta) {
         accept_move = (runif_0_1() < acceptance_linear);
       }
       
-      // accept or reject move
+      // implement move
       if (accept_move) {
         time_inf[i] = time_inf_prop;
         loglike += loglike_prop - loglike_ind[i];
-        logprior += logprior_prop - logprior_ind[i];
         loglike_ind[i] = loglike_prop;
-        logprior_ind[i] = logprior_prop;
+        logprior = logprior_prop;
       }
       
     }
   } // end loop over individuals
+  
+}
+
+//------------------------------------------------
+// Metropolis-Hastings on force of infection for all individuals
+void Particle::MH_lambda(double beta, vector<double> &lambda_bw, int rep, bool Robbins_Monro) {
+  
+  // update all individuals
+  for (int i = 0; i < s_ptr->n_ind; ++i) {
     
+    // propose new lambda by drawing from normal reflected around 0
+    double lambda_prop = rnorm1(lambda[i], lambda_bw[i]);
+    if (lambda_prop < 0) {
+      lambda_prop = -lambda_prop;
+    }
     
-    /*
-    // copy over infection times
-    time_inf_prop = time_inf[i];
+    // calculate new likelihood and prior
+    double loglike_prop = get_loglike_ind(i, lambda_prop, decay_rate, sens, theta, time_inf[i]);
+    double logprior_prop = logprior - get_logprior_lambda(lambda[i]) + 
+      get_logprior_lambda(lambda_prop);
     
-    // loop through infections
-    for (int j = 0; j < n_inf; ++j) {
+    // calculate Metropolis-Hastings ratio
+    double MH = beta*(loglike_prop - loglike_ind[i]) + (logprior_prop - logprior);
+    
+    // accept or reject move
+    double acceptance_linear = 1.0;
+    bool accept_move = true;
+    if (MH < 0) {
+      acceptance_linear = exp(MH);
+      accept_move = (runif_0_1() < acceptance_linear);
+    }
+    
+    // implement move
+    if (accept_move) {
       
-      // get start and end times of proposal interval. This runs from the
-      // previous to the next infection, but is truncated at the start and end
-      // times of sampling
-      double t0 = (j == 0) ? s_ptr->samp_time_start : time_inf_prop[j - 1];
-      double t1 = (j == (n_inf - 1)) ? s_ptr->samp_time_end : time_inf_prop[j + 1];
+      // update parameters etc.
+      lambda[i] = lambda_prop;
+      loglike += loglike_prop - loglike_ind[i];
+      loglike_ind[i] = loglike_prop;
+      logprior = logprior_prop;
       
-      // propose new infection time by drawing from reflected normal within
-      // interval
-      time_inf_prop[j] = rnorm1_interval(time_inf_prop[j], 1.0, t0, t1);
-      
-      double loglike_prop = get_loglike_ind(i, time_inf_prop);
-      double logprior_prop = get_logprior_ind(i, time_inf_prop);
-      
-      // calculate Metropolis-Hastings ratio
-      double MH = beta*(loglike_prop - loglike_ind[i]) + (logprior_prop - logprior_ind[i]);
-      
-      double acceptance_linear = 1.0;
-      bool accept_move = true;
-      if (MH < 0) {
-        acceptance_linear = exp(MH);
-        accept_move = (runif_0_1() < acceptance_linear);
+      // Robbins-Monro positive update  (on the log scale)
+      if (Robbins_Monro) {
+        lambda_bw[i] = exp(log(lambda_bw[i]) + s_ptr->MH_stepsize*(1 - s_ptr->MH_target_acceptance) / sqrt(rep + 1));
       }
+    } else {
       
-      // accept or reject move
-      if (accept_move) {
-        time_inf[i][j] = time_inf_prop[j];
-        loglike += loglike_prop - loglike_ind[i];
-        logprior += logprior_prop - logprior_ind[i];
-        loglike_ind[i] = loglike_prop;
-        logprior_ind[i] = logprior_prop;
-      } else {
-        time_inf_prop[j] = time_inf[i][j];
+      // Robbins-Monro negative update (on the log scale)
+      if (Robbins_Monro) {
+        lambda_bw[i] = exp(log(lambda_bw[i]) - s_ptr->MH_stepsize*s_ptr->MH_target_acceptance / sqrt(rep + 1));
       }
     }
     
   } // end loop through individuals
-  */
+  
 }
 
+//------------------------------------------------
+// Metropolis-Hastings on decay rate of haplotypes
+void Particle::MH_decay_rate(double beta, double &decay_rate_bw, int rep, bool Robbins_Monro) {
+  
+  // copy over likelihoods and priors
+  loglike_ind_prop = loglike_ind;
+  
+  // propose new decay_rate by drawing from normal reflected around 0
+  double decay_rate_prop = rnorm1(decay_rate, decay_rate_bw);
+  if (decay_rate_prop < 0) {
+    decay_rate_prop = -decay_rate_prop;
+  }
+  
+  // update likelihood for all individuals
+  for (int i = 0; i < s_ptr->n_ind; ++i) {
+    loglike_ind_prop[i] = get_loglike_ind(i, lambda[i], decay_rate_prop, sens, theta, time_inf[i]);
+  }
+  double loglike_prop = sum(loglike_ind_prop);
+  
+  // update prior
+  double logprior_prop = logprior - get_logprior_decay_rate(decay_rate) + 
+    get_logprior_decay_rate(decay_rate_prop);
+  
+  // calculate Metropolis-Hastings ratio
+  double MH = beta*(loglike_prop - loglike) + (logprior_prop - logprior);
+  
+  // accept or reject move
+  double acceptance_linear = 1.0;
+  bool accept_move = true;
+  if (MH < 0) {
+    acceptance_linear = exp(MH);
+    accept_move = (runif_0_1() < acceptance_linear);
+  }
+  
+  // implement move
+  if (accept_move) {
+    
+    // update parameters etc.
+    decay_rate = decay_rate_prop;
+    loglike_ind = loglike_ind_prop;
+    loglike = loglike_prop;
+    logprior = logprior_prop;
+    
+    // Robbins-Monro positive update  (on the log scale)
+    if (Robbins_Monro) {
+      decay_rate_bw = exp(log(decay_rate_bw) + s_ptr->MH_stepsize*(1 - s_ptr->MH_target_acceptance) / sqrt(rep + 1));
+    }
+  } else {
+    
+    // Robbins-Monro negative update (on the log scale)
+    if (Robbins_Monro) {
+      decay_rate_bw = exp(log(decay_rate_bw) - s_ptr->MH_stepsize*s_ptr->MH_target_acceptance / sqrt(rep + 1));
+    }
+  }
+  
+}
+
+//------------------------------------------------
+// Metropolis-Hastings on sensitivity
+void Particle::MH_sens(double beta, double &sens_bw, int rep, bool Robbins_Monro) {
+  
+  // copy over likelihoods and priors
+  loglike_ind_prop = loglike_ind;
+  
+  // propose new sensitivity by drawing from reflected normal within interval
+  // [0,1]
+  double sens_prop = rnorm1_interval(sens, sens_bw, 0.0, 1.0);
+  
+  // update likelihood for all individuals
+  for (int i = 0; i < s_ptr->n_ind; ++i) {
+    loglike_ind_prop[i] = get_loglike_ind(i, lambda[i], decay_rate, sens_prop, theta, time_inf[i]);
+  }
+  double loglike_prop = sum(loglike_ind_prop);
+  
+  // update prior
+  double logprior_prop = logprior - get_logprior_sens(sens) + get_logprior_sens(sens_prop);
+  
+  // calculate Metropolis-Hastings ratio
+  double MH = beta*(loglike_prop - loglike) + (logprior_prop - logprior);
+  
+  // accept or reject move
+  double acceptance_linear = 1.0;
+  bool accept_move = true;
+  if (MH < 0) {
+    acceptance_linear = exp(MH);
+    accept_move = (runif_0_1() < acceptance_linear);
+  }
+  
+  // implement move
+  if (accept_move) {
+    
+    // update parameters etc.
+    sens = sens_prop;
+    loglike_ind = loglike_ind_prop;
+    loglike = loglike_prop;
+    logprior = logprior_prop;
+    
+    // Robbins-Monro positive update  (on the log scale)
+    if (Robbins_Monro) {
+      sens_bw = exp(log(sens_bw) + s_ptr->MH_stepsize*(1 - s_ptr->MH_target_acceptance) / sqrt(rep + 1));
+    }
+  } else {
+    
+    // Robbins-Monro negative update (on the log scale)
+    if (Robbins_Monro) {
+      sens_bw = exp(log(sens_bw) - s_ptr->MH_stepsize*s_ptr->MH_target_acceptance / sqrt(rep + 1));
+    }
+  }
+  
+}
+
+//------------------------------------------------
+// Metropolis-Hastings on theta
+void Particle::MH_theta(double beta, double &theta_bw, int rep, bool Robbins_Monro) {
+  
+  // TODO - remove once theta active
+  return;
+  
+  // copy over likelihoods and priors
+  loglike_ind_prop = loglike_ind;
+  
+  // propose new theta by drawing from reflected normal within interval [0,1]
+  double theta_prop = rnorm1_interval(theta, theta_bw, 0.0, 1.0);
+  
+  // update likelihood for all individuals
+  for (int i = 0; i < s_ptr->n_ind; ++i) {
+    loglike_ind_prop[i] = get_loglike_ind(i, lambda[i], decay_rate, sens, theta_prop, time_inf[i]);
+  }
+  double loglike_prop = sum(loglike_ind_prop);
+  
+  // update prior
+  double logprior_prop = logprior - get_logprior_theta(theta) + get_logprior_theta(theta_prop);
+  
+  // calculate Metropolis-Hastings ratio
+  double MH = beta*(loglike_prop - loglike) + (logprior_prop - logprior);
+  
+  // accept or reject move
+  double acceptance_linear = 1.0;
+  bool accept_move = true;
+  if (MH < 0) {
+    acceptance_linear = exp(MH);
+    accept_move = (runif_0_1() < acceptance_linear);
+  }
+  
+  // implement move
+  if (accept_move) {
+    
+    // update parameters etc.
+    theta = theta_prop;
+    loglike_ind = loglike_ind_prop;
+    loglike = loglike_prop;
+    logprior = logprior_prop;
+    
+    // Robbins-Monro positive update  (on the log scale)
+    if (Robbins_Monro) {
+      theta_bw = exp(log(theta_bw) + s_ptr->MH_stepsize*(1 - s_ptr->MH_target_acceptance) / sqrt(rep + 1));
+    }
+  } else {
+    
+    // Robbins-Monro negative update (on the log scale)
+    if (Robbins_Monro) {
+      theta_bw = exp(log(theta_bw) - s_ptr->MH_stepsize*s_ptr->MH_target_acceptance / sqrt(rep + 1));
+    }
+  }
+  
+}
+
+//------------------------------------------------
+// Gibbs sampler on mu
+void Particle::Gibbs_mu() {
+  
+  // subtract current value from logprior
+  logprior -= get_logprior_mu(mu);
+  
+  // calculate mean and variance of conditional posterior on mu
+  double lambda_sumlog = 0.0;
+  for (int i = 0; i < s_ptr->n_ind; ++i) {
+    lambda_sumlog += log(lambda[i]);
+  }
+  double post_var = 1.0 / (1.0 / sq(s_ptr->mu_sd) + double(s_ptr->n_ind) / sq(sigma));
+  double post_mean = (s_ptr->mu_mean / sq(s_ptr->mu_sd) + lambda_sumlog / sq(sigma)) * post_var;
+  
+  // draw new value of mu
+  mu = rnorm1(post_mean, pow(post_var, 0.5));
+  
+  // recalculate logprior
+  logprior += get_logprior_mu(mu);
+}
+
+//------------------------------------------------
+// Gibbs sampler on sigma
+void Particle::Gibbs_sigma() {
+  
+  // subtract current value from logprior
+  logprior -= get_logprior_sigma(sigma);
+  
+  // calculate shape and scale of conditional posterior
+  double lambda_sumsq = 0.0;
+  for (int i = 0; i < s_ptr->n_ind; ++i) {
+    lambda_sumsq += sq(log(lambda[i]) - mu);
+  }
+  double post_shape = s_ptr->sigma_shape + 0.5*s_ptr->n_ind;
+  double post_scale = s_ptr->sigma_scale + 0.5*lambda_sumsq;
+  
+  // draw new value of sigma
+  sigma = rinvgamma1(post_shape, post_scale);
+  
+  // recalculate logprior
+  logprior += get_logprior_sigma(sigma);
+}

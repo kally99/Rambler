@@ -19,8 +19,19 @@ void System::load(Rcpp::List args_data, Rcpp::List args_params) {
   
   // other parameters
   haplo_freqs = rcpp_to_vector_double(args_params["haplo_freqs"]);
-  lambda = rcpp_to_vector_double(args_params["lambda"]);
-  decay_rate = args_params["decay_rate"];
-  sens = args_params["sens"];
+  decay_rate_meanlog = rcpp_to_double(args_params["decay_rate_meanlog"]);
+  decay_rate_sdlog = rcpp_to_double(args_params["decay_rate_sdlog"]);
+  sens_shape1 = rcpp_to_double(args_params["sens_shape1"]);
+  sens_shape2 = rcpp_to_double(args_params["sens_shape2"]);
+  theta_shape1 = rcpp_to_double(args_params["theta_shape1"]);
+  theta_shape2 = rcpp_to_double(args_params["theta_shape2"]);
+  mu_mean = rcpp_to_double(args_params["mu_mean"]);
+  mu_sd = rcpp_to_double(args_params["mu_sd"]);
+  sigma_shape = rcpp_to_double(args_params["sigma_shape"]);
+  sigma_scale = rcpp_to_double(args_params["sigma_scale"]);
+  
+  // misc
+  MH_stepsize = 1.0;
+  MH_target_acceptance = 0.44;
   
 }

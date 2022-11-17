@@ -7,9 +7,16 @@
 run_mcmc(
   df_data,
   haplo_freqs,
-  lambda,
-  decay_rate,
-  sens,
+  decay_rate_meanlog = 0,
+  decay_rate_sdlog = 1,
+  sens_shape1 = 10,
+  sens_shape2 = 1,
+  theta_shape1 = 1,
+  theta_shape2 = 1,
+  mu_mean = 0,
+  mu_sd = 10,
+  sigma_shape = 1,
+  sigma_scale = 1,
   burnin = 100,
   samples = 1000,
   beta = 1,
@@ -25,11 +32,23 @@ point, in long format.}
 transmitted in a given infectious bite (not quite the same thing as
 haplotype frequencies in the population).}
 
-\item{lambda}{vector of FOI in each individual.}
+\item{decay_rate_meanlog, decay_rate_sdlog}{mean and standard deviation (on
+the log scale) of the prior distribution on the decay rate.}
 
-\item{decay_rate}{rate at which each haplotype clears.}
+\item{sens_shape1, sens_shape2}{shape parameters of beta prior on sensitivity.}
 
-\item{sens}{sensitivity of sequencing (assumed the same for all haplotypes).}
+\item{theta_shape1, theta_shape2}{shape parameters of beta prior on theta,
+which controls the probability of picking up any given haplotype in a
+single bite.}
+
+\item{mu_mean, mu_sd}{mean and standard deviation of the hyper-prior on mu,
+which is the log-mean of the log-normal prior on lambda.}
+
+\item{sigma_shape, sigma_scale}{shape and scale parameters of the inverse
+gamma hyper-prior on sigma. The mean of this distribution is given by:
+\deqn{\beta / (\alpha - 1)} for \eqn{\alpha > 1}, and the variance is given
+by \deqn{\beta^2 / ((\alpha - 1)^2(\alpha - 2))} where \eqn{\alpha} is the
+shape and \eqn{\beta} is the scale.}
 
 \item{burnin}{the number of burn-in iterations.}
 

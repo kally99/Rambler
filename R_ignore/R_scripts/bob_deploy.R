@@ -26,17 +26,18 @@
 library(dplyr)
 library(ggplot2)
 
-set.seed(3)
+set.seed(2)
 
 # ------------------------------------------------------------------
 
 # make up some data
-n_ind <- 20
-n_haplo <- 10
+n_ind <- 10
+n_haplo <- 20
 samp_time <- seq(0, 40, 2)
 n_samp <- length(samp_time)
 haplo_freqs <- rep(3 / n_haplo, n_haplo)
-lambda <- rep(0.05, n_ind)
+#lambda <- rep(0.05, n_ind)
+lambda <- seq(0.01, 0.5, l = n_ind)
 decay_rate <- 0.2
 sens <- 0.9
 
@@ -68,21 +69,74 @@ df_data %>%
 #ggsave("/Users/rverity/Desktop/COI_plot.png")
 
 # run MCMC
-burnin <- 1e2
+burnin <- 1e3
 samples <- 1e3
+#beta <- seq(0, 1, 0.2)
+beta <- 1
 my_mcmc <- run_mcmc(df_data = df_data,
                     haplo_freqs = haplo_freqs,
-                    lambda = lambda,
-                    decay_rate,
-                    sens = sens,
                     burnin = burnin,
-                    samples = samples)
+                    samples = samples,
+                    beta = beta,
+                    silent = FALSE)
+                    #decay_rate_meanlog = log(decay_rate), decay_rate_sdlog = 0.001)
 
 
-# trace plot
-i <- 14
+# trace of decay rate
 my_mcmc$output %>%
-  filter(phase == "sampling" & ind == i) %>%
+  filter(param == "decay_rate") %>%
+  ggplot() + theme_bw() +
+  geom_point(aes(x = iteration, y = value)) +
+  geom_hline(yintercept = decay_rate, linetype = "dashed") +
+  ggtitle("decay_rate")
+
+# trace of lambda
+i <- 8
+my_mcmc$output %>%
+  filter(param == sprintf("lambda_%s", i)) %>%
+  ggplot() + theme_bw() +
+  geom_point(aes(x = iteration, y = value)) +
+  geom_hline(yintercept = lambda[i], linetype = "dashed") +
+  ggtitle("lambda")
+
+# trace of sensitivity
+my_mcmc$output %>%
+  filter(param == "sensitivity") %>%
+  ggplot() + theme_bw() +
+  geom_point(aes(x = iteration, y = value)) +
+  geom_hline(yintercept = sens, linetype = "dashed") +
+  ggtitle("sensitivity")
+
+# trace of theta
+my_mcmc$output %>%
+  filter(param == "theta") %>%
+  ggplot() + theme_bw() +
+  geom_point(aes(x = iteration, y = value)) +
+  ggtitle("theta")
+
+quantile_95 <- function(x) {
+  quantile(x, probs = c(0.025, 0.5, 0.975))
+}
+
+# CrI of lambda
+my_mcmc$output %>%
+  filter(phase == "sampling") %>%
+  filter(str_detect(param, "lambda")) %>%
+  group_by(ind) %>%
+  summarise(ind = rep(ind[1], 3),
+            summary = c("Q2.5", "Q50", "Q97.5"),
+            value = quantile_95(value)) %>%
+  pivot_wider(names_from = summary) %>%
+  ggplot() + theme_bw() +
+  geom_pointrange(aes(x = ind, ymin = Q2.5, y = Q50, ymax = Q97.5)) +
+  geom_point(x = 1:n_ind, y = lambda, color = "red")
+
+# trace plot of infection times
+i <- 7
+my_mcmc$output %>%
+  filter(phase == "sampling") %>%
+  filter(ind == i) %>%
+  filter(str_detect(param, "inf_time")) %>%
   ggplot() + theme_bw() +
   geom_point(aes(x = iteration, y = value, color = param)) +
   ylim(range(samp_time)) +
@@ -94,12 +148,14 @@ my_mcmc$output %>%
 # get bandwidth over all samples together
 bw <- my_mcmc$output %>%
   filter(phase == "sampling") %>%
+  filter(str_detect(param, "inf_time")) %>%
   pull(value) %>%
   bw.nrd0()
 
 # get kernel density over all individuals
 df_density <- my_mcmc$output %>%
   filter(phase == "sampling") %>%
+  filter(str_detect(param, "inf_time")) %>%
   group_by(param, ind) %>%
   summarise(param = param[1],
             ind = ind[1],

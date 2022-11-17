@@ -22,10 +22,20 @@ public:
   
   // other parameters
   std::vector<double> haplo_freqs;
-  std::vector<double> lambda;
-  double decay_rate;
-  double sens;
+  double decay_rate_meanlog;
+  double decay_rate_sdlog;
+  double sens_shape1;
+  double sens_shape2;
+  double theta_shape1;
+  double theta_shape2;
+  double mu_mean;
+  double mu_sd;
+  double sigma_shape;
+  double sigma_scale;
   
+  // misc
+  double MH_stepsize;
+  double MH_target_acceptance;
   
   // PUBLIC FUNCTIONS
   
