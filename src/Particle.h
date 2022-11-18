@@ -22,6 +22,8 @@ public:
   std::vector<double> lambda;
   double decay_rate;
   double sens;
+  double mu;
+  double sigma;
   
   // proposal objects
   std::vector<double> time_inf_prop;
@@ -48,6 +50,8 @@ public:
   double get_logprior_lambda(double lambda);
   double get_logprior_decay_rate(double decay_rate);
   double get_logprior_sens(double sens);
+  double get_logprior_mu(double mu);
+  double get_logprior_sigma(double sigma);
   
   // update functions
   void update(double beta, double &time_inf_bw, std::vector<double> &lambda_bw,
@@ -58,5 +62,7 @@ public:
   void MH_lambda(double beta, std::vector<double> &lambda_bw, int rep, bool Robbins_Monro);
   void MH_decay_rate(double beta, double &decay_rate_bw, int rep, bool Robbins_Monro);
   void MH_sens(double beta, double &sens_bw, int rep, bool Robbins_Monro);
+  void Gibbs_mu();
+  void Gibbs_sigma();
   
 };

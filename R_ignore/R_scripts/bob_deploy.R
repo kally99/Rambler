@@ -31,14 +31,14 @@ set.seed(2)
 # ------------------------------------------------------------------
 
 # make up some data
-n_ind <- 10
+n_ind <- 20
 n_haplo <- 20
-samp_time <- seq(0, 20, 2)
+samp_time <- seq(0, 40, 2)
 n_samp <- length(samp_time)
 haplo_freqs <- rep(3 / n_haplo, n_haplo)
 #lambda <- rep(0.05, n_ind)
-lambda <- rep(0.3, n_ind)
-#lambda <- seq(0.01, 0.5, l = n_ind)
+#lambda <- rep(0.3, n_ind)
+lambda <- seq(0.01, 0.5, l = n_ind)
 decay_rate <- 0.2
 sens <- 0.9
 
@@ -70,7 +70,7 @@ df_data %>%
 #ggsave("/Users/rverity/Desktop/COI_plot.png")
 
 # run MCMC
-burnin <- 1e3
+burnin <- 1e2
 samples <- 1e3
 #beta <- seq(0, 1, 0.1)
 beta <- 1
@@ -79,28 +79,9 @@ my_mcmc <- run_mcmc(df_data = df_data,
                     burnin = burnin,
                     samples = samples,
                     beta = beta,
-                    silent = FALSE,
-                    sens_shape1 = 9000, sens_shape2 = 1000, mu = -1.75, sigma = 1.2)
+                    silent = FALSE)
 
 #plot(my_mcmc$diagnostics$MC_accept_burnin)
-
-z <- my_mcmc$output %>%
-  #filter(ind == 3) %>%
-  filter(phase == "sampling") %>%
-  filter(!(param %in% c("sensitivity", "decay_rate")))
-z2 <- expand_grid(iteration = 1:samples+burnin,
-                  ind = 1:n_ind,
-                  param = sprintf("inf_time_%s", 1:30))
-z3 <- left_join(z2, z) %>%
-  group_by(ind, iteration) %>%
-  summarise(n = sum(!is.na(value))) %>%
-  pull(n)
-
-y <- tabulate(z3 + 1) / sum(tabulate(z3 + 1))
-xvec <- seq_along(y) - 1
-plot(xvec, y)
-lines(xvec, dpois(xvec, lambda = diff(range(samp_time))*0.3))
-
 
 # trace of decay rate
 my_mcmc$output %>%
@@ -146,7 +127,7 @@ my_mcmc$output %>%
   geom_point(x = 1:n_ind, y = lambda, color = "red")
 
 # trace plot of infection times
-i <- 2
+i <- 1
 my_mcmc$output %>%
   filter(phase == "sampling") %>%
   filter(ind == i) %>%

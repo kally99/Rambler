@@ -22,21 +22,17 @@ void Particle::init(System &s) {
     sort(time_inf[i].begin(), time_inf[i].end());
   }
   
-  // initialise lambda (force of infection) and other scalars
-  lambda = vector<double>(s_ptr->n_ind, 1.0);
-  
-  // TODO - remove
-  for (int i = 0; i < s_ptr->n_ind; ++i) {
-    //lambda[i] = 0.01 + 0.0544444*i;
-    lambda[i] = 0.3;
-  }
-  
-  decay_rate = 0.2;
-  sens = 0.90;
+  // initialise lambda (force of infection) and other variables
+  lambda = vector<double>(s_ptr->n_ind, 0.1);
+  decay_rate = 0.01;
+  sens = 0.99;
+  mu = 0.0;
+  sigma = 1.0;
   
   // calculate initial likelihoods and priors
   loglike_ind = vector<double>(s_ptr->n_ind);
-  logprior = get_logprior_decay_rate(decay_rate) + get_logprior_sens(sens);
+  logprior = get_logprior_decay_rate(decay_rate) + get_logprior_sens(sens) +
+    get_logprior_mu(mu) + get_logprior_sigma(sigma);
   for (int i = 0; i < s_ptr->n_ind; ++i) {
     loglike_ind[i] = get_loglike_ind(i, lambda[i], decay_rate, sens, time_inf[i]);
     logprior += get_logprior_lambda(lambda[i]) + get_logprior_time_inf(time_inf[i], lambda[i]);
@@ -57,9 +53,11 @@ void Particle::update(double beta, double &time_inf_bw, vector<double> &lambda_b
   // distinct update steps for each free parameter
   MH_time_inf(beta, time_inf_bw, rep, Robbins_Monro);
   split_merge_time_inf(beta);
-  //MH_lambda(beta, lambda_bw, rep, Robbins_Monro);
+  MH_lambda(beta, lambda_bw, rep, Robbins_Monro);
   MH_decay_rate(beta, decay_rate_bw, rep, Robbins_Monro);
-  //MH_sens(beta, sens_bw, rep, Robbins_Monro);
+  MH_sens(beta, sens_bw, rep, Robbins_Monro);
+  Gibbs_mu();
+  Gibbs_sigma();
 }
 
 //------------------------------------------------
@@ -80,7 +78,7 @@ double Particle::get_logprior_time_inf(const vector<double> &time_inf, double la
 //------------------------------------------------
 // calculate logprior of lambda
 double Particle::get_logprior_lambda(double lambda) {
-  return dlnorm1(lambda, s_ptr->mu, s_ptr->sigma, true);
+  return dlnorm1(lambda, mu, sigma, true);
 }
 
 //------------------------------------------------
@@ -96,12 +94,21 @@ double Particle::get_logprior_sens(double sens) {
 }
 
 //------------------------------------------------
+// calculate logprior of mu
+double Particle::get_logprior_mu(double mu) {
+  return dnorm1(mu, s_ptr->mu_mean, s_ptr->mu_sd, true);
+}
+
+//------------------------------------------------
+// calculate logprior of sigma
+double Particle::get_logprior_sigma(double sigma) {
+  return dinvgamma1(sigma, s_ptr->sigma_shape, s_ptr->sigma_scale, true);
+}
+
+//------------------------------------------------
 // calculate loglikelihood for a single individual
 double Particle::get_loglike_ind(int ind, double lambda, double decay_rate,
                                  double sens, const vector<double> &time_inf) {
-  
-  // TODO - remove
-  //return 0.0;
   
   // the final likelihood for this individual will be the product over all
   // haplotypes, and all time series of observations for this haplotype. This
@@ -591,5 +598,49 @@ void Particle::MH_sens(double beta, double &sens_bw, int rep, bool Robbins_Monro
     }
   }
   
+}
+
+//------------------------------------------------
+// Gibbs sampler on mu
+void Particle::Gibbs_mu() {
+  
+  // subtract current value from logprior
+  logprior -= get_logprior_mu(mu);
+  
+  // calculate mean and variance of conditional posterior on mu
+  double lambda_sumlog = 0.0;
+  for (int i = 0; i < s_ptr->n_ind; ++i) {
+    lambda_sumlog += log(lambda[i]);
+  }
+  double post_var = 1.0 / (1.0 / sq(s_ptr->mu_sd) + double(s_ptr->n_ind) / sq(sigma));
+  double post_mean = (s_ptr->mu_mean / sq(s_ptr->mu_sd) + lambda_sumlog / sq(sigma)) * post_var;
+  
+  // draw new value of mu
+  mu = rnorm1(post_mean, pow(post_var, 0.5));
+  
+  // recalculate logprior
+  logprior += get_logprior_mu(mu);
+}
+
+//------------------------------------------------
+// Gibbs sampler on sigma
+void Particle::Gibbs_sigma() {
+  
+  // subtract current value from logprior
+  logprior -= get_logprior_sigma(sigma);
+  
+  // calculate shape and scale of conditional posterior
+  double lambda_sumsq = 0.0;
+  for (int i = 0; i < s_ptr->n_ind; ++i) {
+    lambda_sumsq += sq(log(lambda[i]) - mu);
+  }
+  double post_shape = s_ptr->sigma_shape + 0.5*s_ptr->n_ind;
+  double post_scale = s_ptr->sigma_scale + 0.5*lambda_sumsq;
+  
+  // draw new value of sigma
+  sigma = rinvgamma1(post_shape, post_scale);
+  
+  // recalculate logprior
+  logprior += get_logprior_sigma(sigma);
 }
 
