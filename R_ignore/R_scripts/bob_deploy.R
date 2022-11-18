@@ -69,9 +69,22 @@ df_data %>%
 
 #ggsave("/Users/rverity/Desktop/COI_plot.png")
 
+m <- mean(lambda)
+v <- var(lambda)
+sig2 <- log(v / m^2 + 1)
+sqrt(sig2)
+
+sig_mean <- sig2
+sig_var <- 1e1
+sig_alpha <- sig_mean^2/sig_var + 2
+sig_beta <- sig_mean*(sig_alpha - 1)
+
+sig_alpha <- 1
+sig_beta <- 1
+
 # run MCMC
 burnin <- 1e2
-samples <- 1e3
+samples <- 1e2
 #beta <- seq(0, 1, 0.1)
 beta <- 1
 my_mcmc <- run_mcmc(df_data = df_data,
@@ -79,7 +92,8 @@ my_mcmc <- run_mcmc(df_data = df_data,
                     burnin = burnin,
                     samples = samples,
                     beta = beta,
-                    silent = FALSE)
+                    silent = FALSE,
+                    mu_sd = 10, sigma_shape = sig_alpha, sigma_scale = sig_beta)
 
 #plot(my_mcmc$diagnostics$MC_accept_burnin)
 
@@ -92,7 +106,7 @@ my_mcmc$output %>%
   ggtitle("decay_rate")
 
 # trace of lambda
-i <- 8
+i <- 16
 my_mcmc$output %>%
   filter(param == sprintf("lambda_%s", i)) %>%
   ggplot() + theme_bw() +
@@ -124,7 +138,8 @@ my_mcmc$output %>%
   pivot_wider(names_from = summary) %>%
   ggplot() + theme_bw() +
   geom_pointrange(aes(x = ind, ymin = Q2.5, y = Q50, ymax = Q97.5)) +
-  geom_point(x = 1:n_ind, y = lambda, color = "red")
+  geom_point(x = 1:n_ind, y = lambda, color = "red") +
+  ggtitle("lambda")
 
 # trace plot of infection times
 i <- 1

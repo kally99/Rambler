@@ -27,7 +27,7 @@ void Particle::init(System &s) {
   decay_rate = 0.01;
   sens = 0.99;
   mu = 0.0;
-  sigma = 1.0;
+  sigma = 0.1;
   
   // calculate initial likelihoods and priors
   loglike_ind = vector<double>(s_ptr->n_ind);
@@ -102,7 +102,7 @@ double Particle::get_logprior_mu(double mu) {
 //------------------------------------------------
 // calculate logprior of sigma
 double Particle::get_logprior_sigma(double sigma) {
-  return dinvgamma1(sigma, s_ptr->sigma_shape, s_ptr->sigma_scale, true);
+  return dinvgamma1(sq(sigma), s_ptr->sigma_shape, s_ptr->sigma_scale, true);
 }
 
 //------------------------------------------------
@@ -638,9 +638,11 @@ void Particle::Gibbs_sigma() {
   double post_scale = s_ptr->sigma_scale + 0.5*lambda_sumsq;
   
   // draw new value of sigma
-  sigma = rinvgamma1(post_shape, post_scale);
+  double sigma_sq = rinvgamma1(post_shape, post_scale);
+  sigma = pow(sigma_sq, 0.5);
   
   // recalculate logprior
   logprior += get_logprior_sigma(sigma);
+  
 }
 
