@@ -33,11 +33,12 @@ set.seed(2)
 # make up some data
 n_ind <- 10
 n_haplo <- 20
-samp_time <- seq(0, 40, 2)
+samp_time <- seq(0, 20, 2)
 n_samp <- length(samp_time)
 haplo_freqs <- rep(3 / n_haplo, n_haplo)
 #lambda <- rep(0.05, n_ind)
-lambda <- seq(0.01, 0.5, l = n_ind)
+lambda <- rep(0.3, n_ind)
+#lambda <- seq(0.01, 0.5, l = n_ind)
 decay_rate <- 0.2
 sens <- 0.9
 
@@ -71,15 +72,34 @@ df_data %>%
 # run MCMC
 burnin <- 1e3
 samples <- 1e3
-#beta <- seq(0, 1, 0.2)
+#beta <- seq(0, 1, 0.1)
 beta <- 1
 my_mcmc <- run_mcmc(df_data = df_data,
                     haplo_freqs = haplo_freqs,
                     burnin = burnin,
                     samples = samples,
                     beta = beta,
-                    silent = FALSE)
-                    #decay_rate_meanlog = log(decay_rate), decay_rate_sdlog = 0.001)
+                    silent = FALSE,
+                    sens_shape1 = 9000, sens_shape2 = 1000, mu = -1.75, sigma = 1.2)
+
+#plot(my_mcmc$diagnostics$MC_accept_burnin)
+
+z <- my_mcmc$output %>%
+  #filter(ind == 3) %>%
+  filter(phase == "sampling") %>%
+  filter(!(param %in% c("sensitivity", "decay_rate")))
+z2 <- expand_grid(iteration = 1:samples+burnin,
+                  ind = 1:n_ind,
+                  param = sprintf("inf_time_%s", 1:30))
+z3 <- left_join(z2, z) %>%
+  group_by(ind, iteration) %>%
+  summarise(n = sum(!is.na(value))) %>%
+  pull(n)
+
+y <- tabulate(z3 + 1) / sum(tabulate(z3 + 1))
+xvec <- seq_along(y) - 1
+plot(xvec, y)
+lines(xvec, dpois(xvec, lambda = diff(range(samp_time))*0.3))
 
 
 # trace of decay rate
@@ -107,12 +127,6 @@ my_mcmc$output %>%
   geom_hline(yintercept = sens, linetype = "dashed") +
   ggtitle("sensitivity")
 
-# trace of theta
-my_mcmc$output %>%
-  filter(param == "theta") %>%
-  ggplot() + theme_bw() +
-  geom_point(aes(x = iteration, y = value)) +
-  ggtitle("theta")
 
 quantile_95 <- function(x) {
   quantile(x, probs = c(0.025, 0.5, 0.975))
@@ -132,7 +146,7 @@ my_mcmc$output %>%
   geom_point(x = 1:n_ind, y = lambda, color = "red")
 
 # trace plot of infection times
-i <- 7
+i <- 2
 my_mcmc$output %>%
   filter(phase == "sampling") %>%
   filter(ind == i) %>%

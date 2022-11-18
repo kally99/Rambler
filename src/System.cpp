@@ -23,12 +23,8 @@ void System::load(Rcpp::List args_data, Rcpp::List args_params) {
   decay_rate_sdlog = rcpp_to_double(args_params["decay_rate_sdlog"]);
   sens_shape1 = rcpp_to_double(args_params["sens_shape1"]);
   sens_shape2 = rcpp_to_double(args_params["sens_shape2"]);
-  theta_shape1 = rcpp_to_double(args_params["theta_shape1"]);
-  theta_shape2 = rcpp_to_double(args_params["theta_shape2"]);
-  mu_mean = rcpp_to_double(args_params["mu_mean"]);
-  mu_sd = rcpp_to_double(args_params["mu_sd"]);
-  sigma_shape = rcpp_to_double(args_params["sigma_shape"]);
-  sigma_scale = rcpp_to_double(args_params["sigma_scale"]);
+  mu = rcpp_to_double(args_params["mu"]);
+  sigma = rcpp_to_double(args_params["sigma"]);
   
   // misc
   MH_stepsize = 1.0;

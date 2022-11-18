@@ -36,8 +36,6 @@ Rcpp::List run_mcmc_cpp(Rcpp::List args_data, Rcpp::List args_params,
                                       Rcpp::Named("decay_rate_sampling") = mcmc.decay_rate_sampling,
                                       Rcpp::Named("sens_burnin") = mcmc.sens_burnin,
                                       Rcpp::Named("sens_sampling") = mcmc.sens_sampling,
-                                      Rcpp::Named("theta_burnin") = mcmc.theta_burnin,
-                                      Rcpp::Named("theta_sampling") = mcmc.theta_sampling,
                                       Rcpp::Named("MC_accept_burnin") = mcmc.MC_accept_burnin,
                                       Rcpp::Named("MC_accept_sampling") = mcmc.MC_accept_sampling,
                                       Rcpp::Named("t_diff") = t_diff);

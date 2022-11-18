@@ -51,15 +51,15 @@ sim_ind <- function(samp_time, haplo_freqs, lambda, decay_rate, sens) {
   # loop through all new infections (if any present)
   for (k in seq_len(n_inf)) {
     
-    # draw which haplotypes are introduced. For each haplotype, draw time at which
-    # it decays and update state matrix accordingly
+    # draw which haplotypes are introduced. For each haplotype, draw time at
+    # which it decays and update state matrix accordingly
     which_haplos <- which(rbinom(n_haplo, 1, haplo_freqs) == 1)
     for (j in seq_along(which_haplos)) {
       t_decay <- t_inf[k] + rexp(1, rate = decay_rate)
       if (t_decay > t_end[k]) {
         t_end[k] <- t_decay
       }
-      state_true[j, (samp_time > t_inf[k]) & (samp_time < t_decay)] <- 1
+      state_true[which_haplos[j], (samp_time > t_inf[k]) & (samp_time < t_decay)] <- 1
     }
   }
   

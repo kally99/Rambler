@@ -23,19 +23,22 @@ void Particle::init(System &s) {
   }
   
   // initialise lambda (force of infection) and other scalars
-  lambda = vector<double>(s_ptr->n_ind, 0.1);
+  lambda = vector<double>(s_ptr->n_ind, 1.0);
+  
+  // TODO - remove
+  for (int i = 0; i < s_ptr->n_ind; ++i) {
+    //lambda[i] = 0.01 + 0.0544444*i;
+    lambda[i] = 0.3;
+  }
+  
   decay_rate = 0.2;
-  sens = 0.9;
-  theta = 1.0;
-  mu = -2.0;
-  sigma = 3.0;
+  sens = 0.90;
   
   // calculate initial likelihoods and priors
   loglike_ind = vector<double>(s_ptr->n_ind);
-  logprior = get_logprior_decay_rate(decay_rate) + get_logprior_sens(sens) +
-    + get_logprior_theta(theta) + get_logprior_mu(mu) + get_logprior_sigma(sigma);
+  logprior = get_logprior_decay_rate(decay_rate) + get_logprior_sens(sens);
   for (int i = 0; i < s_ptr->n_ind; ++i) {
-    loglike_ind[i] = get_loglike_ind(i, lambda[i], decay_rate, sens, theta, time_inf[i]);
+    loglike_ind[i] = get_loglike_ind(i, lambda[i], decay_rate, sens, time_inf[i]);
     logprior += get_logprior_lambda(lambda[i]) + get_logprior_time_inf(time_inf[i], lambda[i]);
   }
   loglike = sum(loglike_ind);
@@ -46,9 +49,59 @@ void Particle::init(System &s) {
 }
 
 //------------------------------------------------
+// propose new parameter values and accept/reject
+void Particle::update(double beta, double &time_inf_bw, vector<double> &lambda_bw,
+                      double &decay_rate_bw, double &sens_bw,
+                      int rep, bool Robbins_Monro) {
+  
+  // distinct update steps for each free parameter
+  MH_time_inf(beta, time_inf_bw, rep, Robbins_Monro);
+  split_merge_time_inf(beta);
+  //MH_lambda(beta, lambda_bw, rep, Robbins_Monro);
+  MH_decay_rate(beta, decay_rate_bw, rep, Robbins_Monro);
+  //MH_sens(beta, sens_bw, rep, Robbins_Monro);
+}
+
+//------------------------------------------------
+// calculate logprior of infection times for a single individual
+double Particle::get_logprior_time_inf(const vector<double> &time_inf, double lambda) {
+  
+  // the product of exponential waiting time between infections turns out to be
+  // equal to the Poisson probability of seeing this many infections over the
+  // entire time interval. The N! term is missing from the denominator because
+  // we are dealing with an ordered sequence (time must be increasing over the
+  // vector)
+  int n_inf = time_inf.size();
+  double ret = n_inf*log(lambda) - lambda*(s_ptr->samp_time_end - s_ptr->samp_time_start);
+  
+  return ret;
+}
+
+//------------------------------------------------
+// calculate logprior of lambda
+double Particle::get_logprior_lambda(double lambda) {
+  return dlnorm1(lambda, s_ptr->mu, s_ptr->sigma, true);
+}
+
+//------------------------------------------------
+// calculate logprior of decay_rate
+double Particle::get_logprior_decay_rate(double decay_rate) {
+  return dlnorm1(decay_rate, s_ptr->decay_rate_meanlog, s_ptr->decay_rate_sdlog, true);
+}
+
+//------------------------------------------------
+// calculate logprior of sens
+double Particle::get_logprior_sens(double sens) {
+  return dbeta1(sens, s_ptr->sens_shape1, s_ptr->sens_shape2, true);
+}
+
+//------------------------------------------------
 // calculate loglikelihood for a single individual
 double Particle::get_loglike_ind(int ind, double lambda, double decay_rate,
-                                 double sens, double theta, const vector<double> &time_inf) {
+                                 double sens, const vector<double> &time_inf) {
+  
+  // TODO - remove
+  //return 0.0;
   
   // the final likelihood for this individual will be the product over all
   // haplotypes, and all time series of observations for this haplotype. This
@@ -68,7 +121,7 @@ double Particle::get_loglike_ind(int ind, double lambda, double decay_rate,
     
     // calculate the probability of initialising in the positive state, based on
     // relative rates of infection and clearance
-    double prob_init_positive = lambda*theta*s_ptr->haplo_freqs[j] / (lambda*theta*s_ptr->haplo_freqs[j] + decay_rate);
+    double prob_init_positive = lambda*s_ptr->haplo_freqs[j] / (lambda*s_ptr->haplo_freqs[j] + decay_rate);
     
     // forward_positive will store the joint probability of 1) being in the
     // positive state at the current time, and 2) the probability of all data up
@@ -80,8 +133,8 @@ double Particle::get_loglike_ind(int ind, double lambda, double decay_rate,
     
     // as we walk through the HMM we will focus on sequential time intervals.
     // The focal interval will always run from t0 to t1
-    double t0 = s_ptr->samp_time[0];
-    double t1 = t0;
+    double t0 = s_ptr->samp_time_start;
+    double t1 = 0; // (this will be updated)
     
     // we want to loop through the time intervals in our data, but also we need
     // to consider known infection times. If there is an infection within an
@@ -89,7 +142,7 @@ double Particle::get_loglike_ind(int ind, double lambda, double decay_rate,
     // infection time. Hence, we need a second loop within our observation loop
     // that runs through infection times. inf_index gives the index of this
     // second loop. Note that this is not a simple nested loop, as the second
-    // loop progresses synchronously with the first, and is updated as needed
+    // loop progresses synchronously with the first
     int n_inf = time_inf.size();
     int inf_index = 0;
     
@@ -107,18 +160,18 @@ double Particle::get_loglike_ind(int ind, double lambda, double decay_rate,
           // negative (0) states, acccounting for the possibility that the
           // haplotype is introduced within this infection
           t1 = time_inf[inf_index];
-          double trans_11 = theta*s_ptr->haplo_freqs[j] + (1 - theta*s_ptr->haplo_freqs[j])*exp(-decay_rate*(t1 - t0));
+          double trans_11 = s_ptr->haplo_freqs[j] + (1 - s_ptr->haplo_freqs[j])*exp(-decay_rate*(t1 - t0));
           double trans_10 = 1 - trans_11;
-          double trans_01 = theta*s_ptr->haplo_freqs[j];
+          double trans_01 = s_ptr->haplo_freqs[j];
           double trans_00 = 1 - trans_01;
           
           // calculate new forward positive and negative probabilities. Note
-          // that there is no data within this calculation (i.e. no emmission
+          // that there is no data within this calculation (i.e. no emission
           // probability) because this is an intermediate time between
           // observations.
           // Simply updating forward probabilities could lead to underflow if
           // the proposed transitions are very unlikely. Therefore, calculate
-          // proposed values, and only make the update if new values will sum to
+          // proposed values and only make the update if new values will sum to
           // a reasonable value. Otherwise, deal with underflow
           double forward_positive_prop = forward_positive*trans_11 + forward_negative*trans_01;
           double forward_negative_prop = forward_positive*trans_10 + forward_negative*trans_00;
@@ -136,7 +189,7 @@ double Particle::get_loglike_ind(int ind, double lambda, double decay_rate,
           forward_positive = forward_positive_prop;
           forward_negative = forward_negative_prop;
           
-          // move time forward and the infection index forward one step
+          // move time and the infection index forward one step
           t0 = t1;
           inf_index++;
           if (inf_index == n_inf) {
@@ -145,10 +198,10 @@ double Particle::get_loglike_ind(int ind, double lambda, double decay_rate,
         }
       }
       
-      // at this point we have dealt with any possible infections within the
-      // interval, so we need to move forward to the next observation. Calculate
-      // transition probabilities from the positive state (note that if in
-      // negative state we can only remain there)
+      // at this point, we have dealt with any possible infections within the
+      // observation interval, so we need to move forward to the next
+      // observation. Calculate transition probabilities from the positive state
+      // (note that if in negative state we can only remain there)
       t1 = s_ptr->samp_time[k];
       double trans_11 = exp(-decay_rate*(t1 - t0));
       double trans_10 = 1 - trans_11;
@@ -182,75 +235,6 @@ double Particle::get_loglike_ind(int ind, double lambda, double decay_rate,
 }
 
 //------------------------------------------------
-// calculate logprior of infection times for a single individual
-double Particle::get_logprior_time_inf(const vector<double> &time_inf, double lambda) {
-  
-  // the product of exponential waiting time between infections turns out to be
-  // equal to the Poisson probability of seeing this many infections over the
-  // entire time interval. The N! term is missing from the denominator because
-  // we are dealing with an ordered sequence (time must be increasing over the
-  // vector)
-  int n_inf = time_inf.size();
-  double ret = n_inf*log(lambda) - lambda*(s_ptr->samp_time_end - s_ptr->samp_time_start);
-  
-  return ret;
-}
-
-//------------------------------------------------
-// calculate logprior of lambda
-double Particle::get_logprior_lambda(double lambda) {
-  return dlnorm1(lambda, mu, sigma, true);
-}
-
-//------------------------------------------------
-// calculate logprior of decay_rate
-double Particle::get_logprior_decay_rate(double decay_rate) {
-  return dlnorm1(decay_rate, s_ptr->decay_rate_meanlog, s_ptr->decay_rate_sdlog, true);
-}
-
-//------------------------------------------------
-// calculate logprior of sens
-double Particle::get_logprior_sens(double sens) {
-  return dbeta1(sens, s_ptr->sens_shape1, s_ptr->sens_shape2, true);
-}
-
-//------------------------------------------------
-// calculate logprior of theta
-double Particle::get_logprior_theta(double theta) {
-  return 0.0;
-  //return dbeta1(theta, s_ptr->theta_shape1, s_ptr->theta_shape2, true);
-}
-
-//------------------------------------------------
-// calculate logprior of mu
-double Particle::get_logprior_mu(double mu) {
-  return dnorm1(mu, s_ptr->mu_mean, s_ptr->mu_sd, true);
-}
-
-//------------------------------------------------
-// calculate logprior of sigma
-double Particle::get_logprior_sigma(double sigma) {
-  return dinvgamma1(sigma, s_ptr->sigma_shape, s_ptr->sigma_scale, true);
-}
-
-//------------------------------------------------
-// propose new parameter values and accept/reject
-void Particle::update(double beta, double &time_inf_bw, vector<double> &lambda_bw,
-                      double &decay_rate_bw, double &sens_bw, double &theta_bw,
-                      int rep, bool Robbins_Monro) {
-  
-  // distinct update steps for each free parameter
-  MH_time_inf(beta, time_inf_bw, rep, Robbins_Monro);
-  split_merge_time_inf(beta);
-  MH_lambda(beta, lambda_bw, rep, Robbins_Monro);
-  MH_decay_rate(beta, decay_rate_bw, rep, Robbins_Monro);
-  MH_sens(beta, sens_bw, rep, Robbins_Monro);
-  //MH_theta(beta, theta_bw, rep, Robbins_Monro);
-  //Gibbs_mu();
-  //Gibbs_sigma();
-}
-
-//------------------------------------------------
 // Metropolis-Hastings on infection times for all individuals
 void Particle::MH_time_inf(double beta, double &time_inf_bw, int rep, bool Robbins_Monro) {
   
@@ -277,9 +261,9 @@ void Particle::MH_time_inf(double beta, double &time_inf_bw, int rep, bool Robbi
       
       // propose new infection time by drawing from reflected normal within
       // interval
-      time_inf_prop[j] = rnorm1_interval(time_inf_prop[j], time_inf_bw, t0, t1);
+      time_inf_prop[j] = rnorm1_interval(time_inf[i][j], time_inf_bw, t0, t1);
       
-      double loglike_prop = get_loglike_ind(i, lambda[i], decay_rate, sens, theta, time_inf_prop);
+      double loglike_prop = get_loglike_ind(i, lambda[i], decay_rate, sens, time_inf_prop);
       double logprior_prop = logprior - get_logprior_time_inf(time_inf[i], lambda[i]) +
         get_logprior_time_inf(time_inf_prop, lambda[i]);
       
@@ -351,8 +335,8 @@ void Particle::split_merge_time_inf(double beta) {
       // interval_index = 0 denotes the interval from start of sampling to the
       // first infection. Therefore, the start time for subsequent intervals is
       // time_inf_prop[interval_index - 1], i.e. we have to account for the fact
-      // we are effectively 1-indexed. Calculate t0 and t1 as the start and end
-      // times of the chosen interval
+      // we are effectively 1-indexed rather than 0-indexed. Calculate t0 and t1
+      // as the start and end times of the chosen interval
       int interval_index = sample2(0, n_inf);
       double t0 = (interval_index == 0) ? s_ptr->samp_time_start : time_inf_prop[interval_index - 1];
       double t1 = (interval_index == n_inf) ? s_ptr->samp_time_end : time_inf_prop[interval_index];
@@ -367,12 +351,12 @@ void Particle::split_merge_time_inf(double beta) {
       }
       
       // calculate new likelihood and prior
-      double loglike_prop = get_loglike_ind(i, lambda[i], decay_rate, sens, theta, time_inf_prop);
+      double loglike_prop = get_loglike_ind(i, lambda[i], decay_rate, sens, time_inf_prop);
       double logprior_prop = logprior - get_logprior_time_inf(time_inf[i], lambda[i]) +
         get_logprior_time_inf(time_inf_prop, lambda[i]);
       
       // calculate forward and backward proposal probabilities
-      double logprop_forward = -log((n_inf + 1) * (t1 - t0));
+      double logprop_forward = -log(n_inf + 1) - log(t1 - t0);
       double logprop_backward = -log(n_inf + 1);
       
       // calculate Metropolis-Hastings ratio
@@ -411,13 +395,13 @@ void Particle::split_merge_time_inf(double beta) {
       
       // drop infection and calculate new likelihood and prior
       time_inf_prop.erase(time_inf_prop.begin() + interval_index);
-      double loglike_prop = get_loglike_ind(i, lambda[i], decay_rate, sens, theta, time_inf_prop);
+      double loglike_prop = get_loglike_ind(i, lambda[i], decay_rate, sens, time_inf_prop);
       double logprior_prop = logprior - get_logprior_time_inf(time_inf[i], lambda[i]) +
         get_logprior_time_inf(time_inf_prop, lambda[i]);
       
       // calculate forward and backward proposal probabilities
       double logprop_forward = -log(n_inf);
-      double logprop_backward = -log(n_inf * (t1 - t0));
+      double logprop_backward = -log(n_inf) - log(t1 - t0);
       
       // calculate Metropolis-Hastings ratio
       double MH = beta*(loglike_prop - loglike_ind[i]) + (logprior_prop - logprior) +
@@ -458,7 +442,7 @@ void Particle::MH_lambda(double beta, vector<double> &lambda_bw, int rep, bool R
     }
     
     // calculate new likelihood and prior
-    double loglike_prop = get_loglike_ind(i, lambda_prop, decay_rate, sens, theta, time_inf[i]);
+    double loglike_prop = get_loglike_ind(i, lambda_prop, decay_rate, sens, time_inf[i]);
     double logprior_prop = logprior - get_logprior_lambda(lambda[i]) + 
       get_logprior_lambda(lambda_prop);
     
@@ -513,7 +497,7 @@ void Particle::MH_decay_rate(double beta, double &decay_rate_bw, int rep, bool R
   
   // update likelihood for all individuals
   for (int i = 0; i < s_ptr->n_ind; ++i) {
-    loglike_ind_prop[i] = get_loglike_ind(i, lambda[i], decay_rate_prop, sens, theta, time_inf[i]);
+    loglike_ind_prop[i] = get_loglike_ind(i, lambda[i], decay_rate_prop, sens, time_inf[i]);
   }
   double loglike_prop = sum(loglike_ind_prop);
   
@@ -568,7 +552,7 @@ void Particle::MH_sens(double beta, double &sens_bw, int rep, bool Robbins_Monro
   
   // update likelihood for all individuals
   for (int i = 0; i < s_ptr->n_ind; ++i) {
-    loglike_ind_prop[i] = get_loglike_ind(i, lambda[i], decay_rate, sens_prop, theta, time_inf[i]);
+    loglike_ind_prop[i] = get_loglike_ind(i, lambda[i], decay_rate, sens_prop, time_inf[i]);
   }
   double loglike_prop = sum(loglike_ind_prop);
   
@@ -609,102 +593,3 @@ void Particle::MH_sens(double beta, double &sens_bw, int rep, bool Robbins_Monro
   
 }
 
-//------------------------------------------------
-// Metropolis-Hastings on theta
-void Particle::MH_theta(double beta, double &theta_bw, int rep, bool Robbins_Monro) {
-  
-  // TODO - remove once theta active
-  return;
-  
-  // copy over likelihoods and priors
-  loglike_ind_prop = loglike_ind;
-  
-  // propose new theta by drawing from reflected normal within interval [0,1]
-  double theta_prop = rnorm1_interval(theta, theta_bw, 0.0, 1.0);
-  
-  // update likelihood for all individuals
-  for (int i = 0; i < s_ptr->n_ind; ++i) {
-    loglike_ind_prop[i] = get_loglike_ind(i, lambda[i], decay_rate, sens, theta_prop, time_inf[i]);
-  }
-  double loglike_prop = sum(loglike_ind_prop);
-  
-  // update prior
-  double logprior_prop = logprior - get_logprior_theta(theta) + get_logprior_theta(theta_prop);
-  
-  // calculate Metropolis-Hastings ratio
-  double MH = beta*(loglike_prop - loglike) + (logprior_prop - logprior);
-  
-  // accept or reject move
-  double acceptance_linear = 1.0;
-  bool accept_move = true;
-  if (MH < 0) {
-    acceptance_linear = exp(MH);
-    accept_move = (runif_0_1() < acceptance_linear);
-  }
-  
-  // implement move
-  if (accept_move) {
-    
-    // update parameters etc.
-    theta = theta_prop;
-    loglike_ind = loglike_ind_prop;
-    loglike = loglike_prop;
-    logprior = logprior_prop;
-    
-    // Robbins-Monro positive update  (on the log scale)
-    if (Robbins_Monro) {
-      theta_bw = exp(log(theta_bw) + s_ptr->MH_stepsize*(1 - s_ptr->MH_target_acceptance) / sqrt(rep + 1));
-    }
-  } else {
-    
-    // Robbins-Monro negative update (on the log scale)
-    if (Robbins_Monro) {
-      theta_bw = exp(log(theta_bw) - s_ptr->MH_stepsize*s_ptr->MH_target_acceptance / sqrt(rep + 1));
-    }
-  }
-  
-}
-
-//------------------------------------------------
-// Gibbs sampler on mu
-void Particle::Gibbs_mu() {
-  
-  // subtract current value from logprior
-  logprior -= get_logprior_mu(mu);
-  
-  // calculate mean and variance of conditional posterior on mu
-  double lambda_sumlog = 0.0;
-  for (int i = 0; i < s_ptr->n_ind; ++i) {
-    lambda_sumlog += log(lambda[i]);
-  }
-  double post_var = 1.0 / (1.0 / sq(s_ptr->mu_sd) + double(s_ptr->n_ind) / sq(sigma));
-  double post_mean = (s_ptr->mu_mean / sq(s_ptr->mu_sd) + lambda_sumlog / sq(sigma)) * post_var;
-  
-  // draw new value of mu
-  mu = rnorm1(post_mean, pow(post_var, 0.5));
-  
-  // recalculate logprior
-  logprior += get_logprior_mu(mu);
-}
-
-//------------------------------------------------
-// Gibbs sampler on sigma
-void Particle::Gibbs_sigma() {
-  
-  // subtract current value from logprior
-  logprior -= get_logprior_sigma(sigma);
-  
-  // calculate shape and scale of conditional posterior
-  double lambda_sumsq = 0.0;
-  for (int i = 0; i < s_ptr->n_ind; ++i) {
-    lambda_sumsq += sq(log(lambda[i]) - mu);
-  }
-  double post_shape = s_ptr->sigma_shape + 0.5*s_ptr->n_ind;
-  double post_scale = s_ptr->sigma_scale + 0.5*lambda_sumsq;
-  
-  // draw new value of sigma
-  sigma = rinvgamma1(post_shape, post_scale);
-  
-  // recalculate logprior
-  logprior += get_logprior_sigma(sigma);
-}

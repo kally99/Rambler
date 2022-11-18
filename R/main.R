@@ -52,9 +52,6 @@ restructure_data <- function(df_data) {
 #' @param decay_rate_meanlog,decay_rate_sdlog mean and standard deviation (on
 #'   the log scale) of the prior distribution on the decay rate.
 #' @param sens_shape1,sens_shape2 shape parameters of beta prior on sensitivity.
-#' @param theta_shape1,theta_shape2 shape parameters of beta prior on theta,
-#'   which controls the probability of picking up any given haplotype in a
-#'   single bite.
 #' @param sigma_shape,sigma_scale shape and scale parameters of the inverse
 #'   gamma hyper-prior on sigma. The mean of this distribution is given by:
 #'   \deqn{\beta / (\alpha - 1)} for \eqn{\alpha > 1}, and the variance is given
@@ -81,12 +78,8 @@ run_mcmc <- function(df_data,
                      decay_rate_sdlog = 1.0,
                      sens_shape1 = 10,
                      sens_shape2 = 1,
-                     theta_shape1 = 1,
-                     theta_shape2 = 1,
-                     mu_mean = 0.0,
-                     mu_sd = 10.0,
-                     sigma_shape = 1.0,
-                     sigma_scale = 1.0,
+                     mu = 0.0,
+                     sigma = 1.0,
                      burnin = 1e2,
                      samples = 1e3,
                      beta = 1,
@@ -105,12 +98,8 @@ run_mcmc <- function(df_data,
   assert_single_pos(decay_rate_sdlog)
   assert_single_pos(sens_shape1)
   assert_single_pos(sens_shape2)
-  assert_single_pos(theta_shape1)
-  assert_single_pos(theta_shape2)
-  assert_single_numeric(mu_mean)
-  assert_single_pos(mu_sd)
-  assert_single_pos(sigma_shape)
-  assert_single_pos(sigma_scale)
+  assert_single_numeric(mu)
+  assert_single_pos(sigma)
   assert_single_pos_int(burnin, zero_allowed = FALSE)
   assert_single_pos_int(samples, zero_allowed = FALSE)
   assert_vector_bounded(beta)
@@ -124,12 +113,8 @@ run_mcmc <- function(df_data,
                       decay_rate_sdlog = decay_rate_sdlog,
                       sens_shape1 = sens_shape1,
                       sens_shape2 = sens_shape2,
-                      theta_shape1 = theta_shape1,
-                      theta_shape2 = theta_shape2,
-                      mu_mean = mu_mean,
-                      mu_sd = mu_sd,
-                      sigma_shape = sigma_shape,
-                      sigma_scale = sigma_scale)
+                      mu = mu,
+                      sigma = sigma)
   
   # make a list of MCMC parameters
   args_MCMC <- list(burnin = burnin,
@@ -210,18 +195,6 @@ run_mcmc <- function(df_data,
                               param = "sensitivity",
                               value = output_raw$sens_sampling))
   
-  # get data.frame of theta
-  df_theta <- rbind(data.frame(phase = "burnin",
-                               iteration = 1:burnin,
-                               ind = NA,
-                               param = "theta",
-                               value = output_raw$theta_burnin),
-                    data.frame(phase = "sampling",
-                               iteration = 1:samples + burnin,
-                               ind = NA,
-                               param = "theta",
-                               value = output_raw$theta_sampling))
-  
   # get MCMC diagnostics
   diagnostics = list(MC_accept_burnin = output_raw$MC_accept_burnin / burnin,
                      MC_accept_sampling = output_raw$MC_accept_sampling / samples)
@@ -231,8 +204,7 @@ run_mcmc <- function(df_data,
   ret <- list(output = rbind(df_time_inf,
                              df_lambda,
                              df_decay_rate,
-                             df_sens,
-                             df_theta),
+                             df_sens),
               diagnostics = diagnostics)
   return(ret)
 }

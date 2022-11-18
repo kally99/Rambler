@@ -26,12 +26,8 @@ public:
   double decay_rate_sdlog;
   double sens_shape1;
   double sens_shape2;
-  double theta_shape1;
-  double theta_shape2;
-  double mu_mean;
-  double mu_sd;
-  double sigma_shape;
-  double sigma_scale;
+  double mu;
+  double sigma;
   
   // misc
   double MH_stepsize;
