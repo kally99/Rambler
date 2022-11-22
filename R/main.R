@@ -46,9 +46,11 @@ restructure_data <- function(df_data) {
 #'
 #' @param df_data data.frame of haplotypes in each individual at each time
 #'   point, in long format.
-#' @param haplo_freqs vector giving the probability that each haplotype is
-#'   transmitted in a given infectious bite (not quite the same thing as
-#'   haplotype frequencies in the population).
+#' @param haplo_freqs vector giving relative frequencies of each haplotype. This
+#'   will be automatically  normalised to be relative to the maximum value.
+#' @param theta scaling parameter on relative haplotype frequencies. The mean
+#'   number of haplotypes introduced in a single bite is
+#'   \code{theta*sum(haplo_freqs)}.
 #' @param decay_rate_meanlog,decay_rate_sdlog mean and standard deviation (on
 #'   the log scale) of the prior distribution on the decay rate.
 #' @param sens_shape1,sens_shape2 shape parameters of beta prior on sensitivity.
@@ -74,6 +76,7 @@ restructure_data <- function(df_data) {
 
 run_mcmc <- function(df_data,
                      haplo_freqs,
+                     theta = 1.0,
                      decay_rate_meanlog = 0.0,
                      decay_rate_sdlog = 1.0,
                      sens_shape1 = 10,
@@ -96,6 +99,7 @@ run_mcmc <- function(df_data,
   
   # check inputs
   assert_vector_bounded(haplo_freqs)
+  assert_single_bounded(theta)
   assert_single_numeric(decay_rate_meanlog)
   assert_single_pos(decay_rate_sdlog)
   assert_single_pos(sens_shape1)
@@ -112,7 +116,8 @@ run_mcmc <- function(df_data,
   assert_single_logical(silent)
   
   # make a list of model parameters
-  args_params <- list(haplo_freqs = haplo_freqs,
+  args_params <- list(haplo_freqs = haplo_freqs / max(haplo_freqs),
+                      theta = theta,
                       decay_rate_meanlog = decay_rate_meanlog,
                       decay_rate_sdlog = decay_rate_sdlog,
                       sens_shape1 = sens_shape1,
@@ -151,55 +156,51 @@ run_mcmc <- function(df_data,
   # get data.frame of infection times for all individuals. Note that the number
   # of infection events can change from one iteration to the next, hence this is
   # in long form
+  
+  # make single list of burnin and sampling phases
   time_inf_list <- c(output_raw$time_inf_burnin,
                      output_raw$time_inf_sampling)
-  df_time_inf <- mapply(function(i) {
-    x <- time_inf_list[[i]]
-    lx <- mapply(length, x)
-    data.frame(phase = ifelse(i <= burnin, "burnin", "sampling"),
-               iteration = i,
-               ind = rep(1:n_ind, times = lx),
-               param = sprintf("inf_time_%s", unlist(mapply(seq_len, lx))),
-               value = unlist(x))
-  }, seq_along(time_inf_list), SIMPLIFY = FALSE) %>%
-    bind_rows()
+  
+  # get total number of infections for each iteration, and for each individual
+  # in each iteration
+  n_inf_iteration <- unlist(mapply(function(x) {
+    length(unlist(x))
+  }, time_inf_list, SIMPLIFY = FALSE))
+  n_inf_indiv <- unlist(mapply(function(x) {
+    unlist(mapply(length, x, SIMPLIFY = FALSE))
+  }, time_inf_list, SIMPLIFY = FALSE))
+  
+  # make final data.frame of infection times
+  df_time_inf <- data.frame(phase = c(rep("burnin", sum(n_inf_iteration[1:burnin])),
+                                      rep("sampling", sum(n_inf_iteration[1:samples + burnin]))),
+                            iteration = rep(1:(burnin + samples), times = n_inf_iteration),
+                            ind = rep(rep(1:n_ind, burnin + samples), times = n_inf_indiv),
+                            param = sprintf("inf_time_%s", unlist(mapply(seq_len, n_inf_indiv))),
+                            value = unlist(time_inf_list))
   
   # get data.frame of lambda
   lambda_list <- c(output_raw$lambda_burnin,
                    output_raw$lambda_sampling)
-  df_lambda <- mapply(function(i) {
-    x <- lambda_list[[i]]
-    data.frame(phase = ifelse(i <= burnin, "burnin", "sampling"),
-               iteration = i,
-               ind = 1:n_ind,
-               param = sprintf("lambda_%s", 1:n_ind),
-               value = unlist(x))
-  }, seq_along(lambda_list), SIMPLIFY = FALSE) %>%
-    bind_rows()
+  df_lambda <- data.frame(phase = c(rep("burnin", burnin * n_ind), rep("sampling", burnin * n_ind)),
+                          iteration = rep(1:(burnin + samples), each = n_ind),
+                          ind = 1:n_ind,
+                          param = sprintf("lambda_%s", 1:n_ind),
+                          value = unlist(lambda_list))
+  
+  # function for making data.frame of a scalar parameter
+  make_df_scalar_output <- function(x, param_name) {
+    data.frame(phase = c(rep("burnin", burnin), rep("sampling", samples)),
+               iteration = 1:(burnin + samples),
+               ind = NA,
+               param = param_name,
+               value = x)
+  }
   
   # get data.frame of decay rate
-  df_decay_rate <- rbind(data.frame(phase = "burnin",
-                                    iteration = 1:burnin,
-                                    ind = NA,
-                                    param = "decay_rate",
-                                    value = output_raw$decay_rate_burnin),
-                         data.frame(phase = "sampling",
-                                    iteration = 1:samples + burnin,
-                                    ind = NA,
-                                    param = "decay_rate",
-                                    value = output_raw$decay_rate_sampling))
+  df_decay_rate <- make_df_scalar_output(c(output_raw$decay_rate_burnin, output_raw$decay_rate_sampling), "decay_rate")
   
   # get data.frame of sensitivity
-  df_sens <- rbind(data.frame(phase = "burnin",
-                              iteration = 1:burnin,
-                              ind = NA,
-                              param = "sensitivity",
-                              value = output_raw$sens_burnin),
-                   data.frame(phase = "sampling",
-                              iteration = 1:samples + burnin,
-                              ind = NA,
-                              param = "sensitivity",
-                              value = output_raw$sens_sampling))
+  df_sens <- make_df_scalar_output(c(output_raw$sens_burnin, output_raw$sens_sampling), "sensitivity")
   
   # get MCMC diagnostics
   diagnostics = list(MC_accept_burnin = output_raw$MC_accept_burnin / burnin,

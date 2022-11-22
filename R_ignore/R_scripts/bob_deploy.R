@@ -32,15 +32,19 @@ set.seed(2)
 
 # make up some data
 n_ind <- 20
-n_haplo <- 20
+n_haplo <- 10
 samp_time <- seq(0, 40, 2)
 n_samp <- length(samp_time)
 haplo_freqs <- rep(3 / n_haplo, n_haplo)
+#haplo_freqs <- runif(n_haplo)
 #lambda <- rep(0.05, n_ind)
-#lambda <- rep(0.3, n_ind)
-lambda <- seq(0.01, 0.5, l = n_ind)
-decay_rate <- 0.2
-sens <- 0.9
+lambda <- rep(0.05, n_ind)
+#lambda <- seq(0.01, 0.5, l = n_ind)
+#lambda <- rlnorm(n_ind, -3, 0.1)
+decay_rate <- 0.1
+sens <- 0.8
+theta <- 0.2
+haplo_freqs <- theta * haplo_freqs / max(haplo_freqs)
 
 # simulate cohort
 dat_list <- sim_cohort(n_ind, samp_time, haplo_freqs, lambda, decay_rate, sens)
@@ -69,31 +73,18 @@ df_data %>%
 
 #ggsave("/Users/rverity/Desktop/COI_plot.png")
 
-m <- mean(lambda)
-v <- var(lambda)
-sig2 <- log(v / m^2 + 1)
-sqrt(sig2)
-
-sig_mean <- sig2
-sig_var <- 1e1
-sig_alpha <- sig_mean^2/sig_var + 2
-sig_beta <- sig_mean*(sig_alpha - 1)
-
-sig_alpha <- 1
-sig_beta <- 1
-
 # run MCMC
-burnin <- 1e2
-samples <- 1e2
+burnin <- 1e3
+samples <- 1e3
 #beta <- seq(0, 1, 0.1)
 beta <- 1
 my_mcmc <- run_mcmc(df_data = df_data,
                     haplo_freqs = haplo_freqs,
+                    theta = theta,
                     burnin = burnin,
                     samples = samples,
                     beta = beta,
-                    silent = FALSE,
-                    mu_sd = 10, sigma_shape = sig_alpha, sigma_scale = sig_beta)
+                    silent = FALSE)
 
 #plot(my_mcmc$diagnostics$MC_accept_burnin)
 
@@ -102,16 +93,16 @@ my_mcmc$output %>%
   filter(param == "decay_rate") %>%
   ggplot() + theme_bw() +
   geom_point(aes(x = iteration, y = value)) +
-  geom_hline(yintercept = decay_rate, linetype = "dashed") +
+  geom_hline(yintercept = decay_rate, linetype = "dashed", color = "red") +
   ggtitle("decay_rate")
 
 # trace of lambda
-i <- 16
+i <- 1
 my_mcmc$output %>%
   filter(param == sprintf("lambda_%s", i)) %>%
   ggplot() + theme_bw() +
   geom_point(aes(x = iteration, y = value)) +
-  geom_hline(yintercept = lambda[i], linetype = "dashed") +
+  geom_hline(yintercept = lambda[i], linetype = "dashed", color = "red") +
   ggtitle("lambda")
 
 # trace of sensitivity
@@ -119,7 +110,7 @@ my_mcmc$output %>%
   filter(param == "sensitivity") %>%
   ggplot() + theme_bw() +
   geom_point(aes(x = iteration, y = value)) +
-  geom_hline(yintercept = sens, linetype = "dashed") +
+  geom_hline(yintercept = sens, linetype = "dashed", color = "red") +
   ggtitle("sensitivity")
 
 
@@ -175,11 +166,12 @@ df_density <- my_mcmc$output %>%
 # plot
 df_density %>%
   ggplot() + theme_bw() +
-  geom_area(aes(x = x, y = y, fill = param)) +
+  geom_area(aes(x = x, y = y, fill = param), color = "black", size = 0.2) +
   facet_wrap(~ind) +
   geom_segment(aes(x = t_inf, xend = t_inf, y = 0.2, yend = 0),
                arrow = arrow(length = unit(0.1, "npc")), data = t_inf_df) +
-  xlab("Time") + ylab("Posterior probability")
+  xlab("Time") + ylab("Posterior probability")# +
+  #scale_fill_brewer(palette = "Paired")
 
 #ggsave("/Users/rverity/Desktop/density_plot.png")
 

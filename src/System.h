@@ -22,6 +22,7 @@ public:
   
   // other parameters
   std::vector<double> haplo_freqs;
+  double theta;
   double decay_rate_meanlog;
   double decay_rate_sdlog;
   double sens_shape1;

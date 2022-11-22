@@ -7,12 +7,11 @@
 run_mcmc(
   df_data,
   haplo_freqs,
+  theta = 1,
   decay_rate_meanlog = 0,
   decay_rate_sdlog = 1,
   sens_shape1 = 10,
   sens_shape2 = 1,
-  theta_shape1 = 1,
-  theta_shape2 = 1,
   mu_mean = 0,
   mu_sd = 10,
   sigma_shape = 1,
@@ -28,21 +27,20 @@ run_mcmc(
 \item{df_data}{data.frame of haplotypes in each individual at each time
 point, in long format.}
 
-\item{haplo_freqs}{vector giving the probability that each haplotype is
-transmitted in a given infectious bite (not quite the same thing as
-haplotype frequencies in the population).}
+\item{haplo_freqs}{vector giving relative frequencies of each haplotype. This
+will be automatically  normalised to be relative to the maximum value.}
+
+\item{theta}{scaling parameter on relative haplotype frequencies. The mean
+number of haplotypes introduced in a single bite is
+\code{theta*sum(haplo_freqs)}.}
 
 \item{decay_rate_meanlog, decay_rate_sdlog}{mean and standard deviation (on
 the log scale) of the prior distribution on the decay rate.}
 
 \item{sens_shape1, sens_shape2}{shape parameters of beta prior on sensitivity.}
 
-\item{theta_shape1, theta_shape2}{shape parameters of beta prior on theta,
-which controls the probability of picking up any given haplotype in a
-single bite.}
-
-\item{mu_mean, mu_sd}{mean and standard deviation of the hyper-prior on mu,
-which is the log-mean of the log-normal prior on lambda.}
+\item{mu_mean, mu_sd}{mean and standard deviation of the normal hyper-prior on
+mu, which is the log-mean of the log-normal prior on lambda.}
 
 \item{sigma_shape, sigma_scale}{shape and scale parameters of the inverse
 gamma hyper-prior on sigma. The mean of this distribution is given by:

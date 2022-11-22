@@ -45,7 +45,7 @@ public:
   
   // likelihood and prior
   double get_loglike_ind(int ind, double lambda, double decay_rate,
-                         double sens, const std::vector<double> &time_inf);
+                         double sens, double theta, const std::vector<double> &time_inf);
   double get_logprior_time_inf(const std::vector<double> &time_inf, double lambda);
   double get_logprior_lambda(double lambda);
   double get_logprior_decay_rate(double decay_rate);
@@ -55,8 +55,7 @@ public:
   
   // update functions
   void update(double beta, double &time_inf_bw, std::vector<double> &lambda_bw,
-              double &decay_rate_bw, double &sens_bw,
-              int rep, bool Robbins_Monro);
+              double &decay_rate_bw, double &sens_bw, int rep, bool Robbins_Monro);
   void MH_time_inf(double beta, double &time_inf_bw, int rep, bool Robbins_Monro);
   void split_merge_time_inf(double beta);
   void MH_lambda(double beta, std::vector<double> &lambda_bw, int rep, bool Robbins_Monro);

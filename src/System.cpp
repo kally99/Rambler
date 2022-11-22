@@ -19,6 +19,7 @@ void System::load(Rcpp::List args_data, Rcpp::List args_params) {
   
   // other parameters
   haplo_freqs = rcpp_to_vector_double(args_params["haplo_freqs"]);
+  theta = rcpp_to_double(args_params["theta"]);
   decay_rate_meanlog = rcpp_to_double(args_params["decay_rate_meanlog"]);
   decay_rate_sdlog = rcpp_to_double(args_params["decay_rate_sdlog"]);
   sens_shape1 = rcpp_to_double(args_params["sens_shape1"]);
