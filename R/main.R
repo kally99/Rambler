@@ -176,7 +176,8 @@ run_mcmc <- function(df_data,
                             iteration = rep(1:(burnin + samples), times = n_inf_iteration),
                             ind = rep(rep(1:n_ind, burnin + samples), times = n_inf_indiv),
                             param = sprintf("inf_time_%s", unlist(mapply(seq_len, n_inf_indiv))),
-                            value = unlist(time_inf_list))
+                            value = unlist(time_inf_list)) %>%
+    dplyr::mutate(param = factor(param, levels = sprintf("inf_time_%s", 1:max(n_inf_indiv))))
   
   # get data.frame of lambda
   lambda_list <- c(output_raw$lambda_burnin,

@@ -26,7 +26,7 @@
 library(dplyr)
 library(ggplot2)
 
-set.seed(2)
+#set.seed(2)
 
 # ------------------------------------------------------------------
 
@@ -86,6 +86,7 @@ my_mcmc <- run_mcmc(df_data = df_data,
                     beta = beta,
                     silent = FALSE)
 
+#output_raw <- my_mcmc
 #plot(my_mcmc$diagnostics$MC_accept_burnin)
 
 # trace of decay rate
@@ -163,6 +164,11 @@ df_density <- my_mcmc$output %>%
             x = seq(first(samp_time), last(samp_time), l = 201),
             y = length(value) / samples * density(value, from = first(samp_time), to = last(samp_time), n = 201, bw = 0.5)$y)
 
+col_vec <- c("#8baaec", "#66d4f6", "#66c2a7", "#98c084", "#ec9374", "#babd57", 
+             "#c7a4e5", "#e797ae", "#d9ad5d", "#41b8c1", "#5bb4e5", "#e1dd9b", 
+             "#6be8df", "#f280af", "#5eb7cf", "#6bcc83", "#e390df", "#4bdcee", 
+             "#bee788", "#67eabe")
+
 # plot
 df_density %>%
   ggplot() + theme_bw() +
@@ -170,7 +176,8 @@ df_density %>%
   facet_wrap(~ind) +
   geom_segment(aes(x = t_inf, xend = t_inf, y = 0.2, yend = 0),
                arrow = arrow(length = unit(0.1, "npc")), data = t_inf_df) +
-  xlab("Time") + ylab("Posterior probability")# +
+  xlab("Time") + ylab("Posterior probability") +
+  scale_fill_manual(values = col_vec)
   #scale_fill_brewer(palette = "Paired")
 
 #ggsave("/Users/rverity/Desktop/density_plot.png")
